@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@toysinbox3dprinting/js-geometry": "^1.0.12",
-    "@webgpu/types": "^0.1.40"
+    "@webgpu/types": "^0.1.40",
+    "stream-browserify": "^3.0.0",
+    "xml-js": "^1.6.11"
   }
 }

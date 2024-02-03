@@ -13,6 +13,21 @@ struct RaySample {
     pdf: f32
 }
 
+struct Primitive {
+    kind_material: vec4f, // kind, r, g, b
+    ctm: mat4x4f,
+    ctm_inv: mat4x4f,
+    temp: vec4f // is_active, emissive
+}
+
+struct PrimitiveIntersection {
+    primitive: Primitive,
+    point: vec4f,
+    normal: vec4f,
+    intersected: bool,
+    t: f32
+}
+
 fn eval_ray(ray: Ray, t: f32) -> vec4f {
     return ray.p + ray.d * t;
 }

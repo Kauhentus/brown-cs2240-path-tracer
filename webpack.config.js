@@ -17,6 +17,12 @@ module.exports = {
 	},
 	resolve: {
 		extensions: ['.tsx', '.ts', '.js'],
+		fallback: { 
+			"stream": require.resolve("stream-browserify"),
+			"string_decoder": false,
+			"buffer": false,
+			"events": false
+		}
 	},
 	output: {
 		filename: 'bundle.js',

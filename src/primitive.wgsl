@@ -1,18 +1,3 @@
-struct Primitive {
-    kind_material: vec4f, // kind, r, g, b
-    ctm: mat4x4f,
-    ctm_inv: mat4x4f,
-    temp: vec4f // is_active, emissive
-}
-
-struct PrimitiveIntersection {
-    primitive: Primitive,
-    point: vec4f,
-    normal: vec4f,
-    intersected: bool,
-    t: f32
-}
-
 fn mat4_identity() -> mat4x4f {
     return mat4x4f(
         1, 0, 0, 0,

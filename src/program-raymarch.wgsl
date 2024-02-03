@@ -25,6 +25,8 @@ struct OutputData {
 @group(0) @binding(1) var<storage, read_write> resultMatrix : OutputData;
 @group(0) @binding(2) var<storage, read> primitives : array<Primitive>;
 
+@group(0) @binding(3) var<storage, read> primitive_0 : array<f32>;
+
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_id : vec3u) {
     // prepare meta variables
@@ -74,53 +76,58 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     resultMatrix.numbers[index] = final_color;
 }
 
+fn intersect_1(cur_ray: Ray) -> PrimitiveIntersection {
+    var closest_intersection = null_intersection();
+    var prev_intersection = null_intersection();
+    var closest_t = -1.0;
+    var cur_color = vec3(0.0);
+
+    for(var i = 0u; i < arrayLength(&primitives); i++){
+        let cur_primitive = primitives[i];
+        let ctm_inv = cur_primitive.ctm_inv;
+        let trans_ray = Ray(ctm_inv * cur_ray.p, ctm_inv * cur_ray.d);
+
+        var intersection = null_intersection();
+        if(cur_primitive.kind_material.x == 0){
+            intersection = intersect_unit_cube(cur_primitive, trans_ray);
+        } else if(cur_primitive.kind_material.x == 1){
+            intersection = intersect_unit_sphere(cur_primitive, trans_ray);
+        }
+
+        if(intersection.intersected){
+            if(closest_t < 0 || intersection.t < closest_t){
+                closest_intersection = intersection;
+                closest_t = intersection.t;
+
+                closest_intersection.point = cur_primitive.ctm * closest_intersection.point;
+                let new_normal = (cur_primitive.ctm * vec4<f32>(closest_intersection.normal.xyz, 0.0));
+                closest_intersection.normal = normalize(new_normal);
+            }
+        }
+    }
+
+    return closest_intersection;
+}
+
 fn radiance(ray: Ray, seed: i32) -> vec3f {
     var cur_ray = ray;
     var total_color = vec3(0.0);
     var weight = 1.0;
     var normal_mode = false;
+    var prev_intersection = null_intersection();
 
     for(var j = 0; j < 4; j++){
-        var closest_intersection = null_intersection();
-        var prev_intersection = null_intersection();
-        var closest_t = -1.0;
+        var closest_intersection = intersect_1(cur_ray);
         var cur_color = vec3(0.0);
-
-        for(var i = 0u; i < arrayLength(&primitives); i++){
-            let cur_primitive = primitives[i];
-            let ctm_inv = cur_primitive.ctm_inv;
-            let trans_ray = Ray(ctm_inv * cur_ray.p, ctm_inv * cur_ray.d);
-
-            var intersection = null_intersection();
-            if(cur_primitive.kind_material.x == 0){
-                intersection = intersect_unit_cube(cur_primitive, trans_ray);
-            } else if(cur_primitive.kind_material.x == 1){
-                intersection = intersect_unit_sphere(cur_primitive, trans_ray);
-            }
-
-            if(intersection.intersected){
-                if(closest_t < 0 || intersection.t < closest_t){
-                    closest_intersection = intersection;
-                    closest_t = intersection.t;
-
-                    closest_intersection.point = cur_primitive.ctm * closest_intersection.point;
-                    let new_normal = (cur_primitive.ctm * vec4<f32>(closest_intersection.normal.xyz, 0.0));
-                    closest_intersection.normal = normalize(new_normal);
-                }
-            }
-        }
 
         // return if no intersection
         if(!closest_intersection.intersected){ break; }
         // we have an intersection, proceed!
 
-
         // calculate L_e term (emissive material struck!)
         if(closest_intersection.primitive.temp.y == 1.0){
             cur_color += closest_intersection.primitive.kind_material.yzw;
-
             total_color += cur_color * weight;
-
             break;
         }
 

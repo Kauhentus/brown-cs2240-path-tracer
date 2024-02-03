@@ -101,7 +101,11 @@ const primitives = [
     )
 ]
 
-export const programEntry = (screenDimension: number[], ctx: CanvasRenderingContext2D) => {  
+export const programEntry = (
+    screenDimension: number[], 
+    ctx: CanvasRenderingContext2D, 
+    primitive_data: Float32Array[]
+) => {  
     let screen_dimension_inv = [1 / screenDimension[0], 1 / screenDimension[1]];
     let camera_position = profiles[select_profile].camera_position;
     let camera_look = profiles[select_profile].camera_look;
@@ -153,13 +157,24 @@ export const programEntry = (screenDimension: number[], ctx: CanvasRenderingCont
         const primitivesArrayRef = primitivesBuffer.getMappedRange();
         new Float32Array(primitivesArrayRef).set(primitivesData);
         primitivesBuffer.unmap();
-        console.log(primitivesData, primitivesData.length)
     
         const resultMatrixBufferSize = 1 * Float32Array.BYTES_PER_ELEMENT * (screenDimension[0] * screenDimension[1]);
         const resultMatrixBuffer = device.createBuffer({
             size: resultMatrixBufferSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         });
+
+        const packed_primitive_buffers = primitive_data.map(data => {
+            const packed_buffer = device.createBuffer({
+                mappedAtCreation: true,
+                size: data.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            });
+            const packed_buffer_arrayref = packed_buffer.getMappedRange();
+            new Float32Array(packed_buffer_arrayref).set(data);
+            packed_buffer.unmap();
+            return packed_buffer;
+        })
 
         const sample_collector = new Int32Array(screenDimension[0] * screenDimension[1] * 4);
         const display_buffer = new Uint8ClampedArray(screenDimension[0] * screenDimension[1] * 4);
@@ -188,6 +203,13 @@ export const programEntry = (screenDimension: number[], ctx: CanvasRenderingCont
                         type: "read-only-storage"
                     }
                 },
+                ...packed_primitive_buffers.map((_, i) => ({
+                    binding: i + 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                } as GPUBindGroupLayoutEntry))
             ]
         });
     
@@ -211,7 +233,13 @@ export const programEntry = (screenDimension: number[], ctx: CanvasRenderingCont
                     resource: {
                         buffer: primitivesBuffer
                     }
-                }
+                },
+                ...packed_primitive_buffers.map((buffer, i) => ({
+                    binding: i + 3,
+                    resource: {
+                        buffer: buffer
+                    }
+                } as GPUBindGroupEntry))
             ]
         });
     

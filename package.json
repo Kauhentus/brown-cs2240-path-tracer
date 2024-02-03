@@ -1,0 +1,23 @@
+{
+  "name": "toysinbox-diffusion-reaction",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "npx webpack",
+    "run": "http-server -c-1",
+    "dev": "npm run build && npm run run"
+  },
+  "author": "Josh Yang",
+  "license": "ISC",
+  "devDependencies": {
+    "ts-loader": "^9.4.2",
+    "typescript": "^4.9.4",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1"
+  },
+  "dependencies": {
+    "@toysinbox3dprinting/js-geometry": "^1.0.12",
+    "@webgpu/types": "^0.1.40"
+  }
+}

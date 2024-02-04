@@ -1,7 +1,19 @@
 import { SceneObjectGroup, SceneObjectMaterial } from "./ts-util/data-structs";
 
 export const pack_scene_object_group = (g: SceneObjectGroup) => {
-    let object_indices = g.objects.map((o, i) => [...o.indices, i]).flat();
+    let object_indices = g.objects.map((o, id) => {
+        let new_indices = [];
+        for(let i = 0; i < o.indices.length; i += 3){
+            new_indices.push(
+                o.indices[i],
+                o.indices[i + 1],
+                o.indices[i + 2],
+                id
+            );
+        }
+        return new_indices;
+    }).flat();
+    
     let object_materials = g.objects.map(o => o.material as SceneObjectMaterial)
 
     const pack_material = (m: SceneObjectMaterial) => {
@@ -16,8 +28,8 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
     let packed_materials = object_materials.map(pack_material).flat();
 
     let group = [
-        g.vertices.length,
-        g.objects.length,
+        g.vertices.length / 3, // num vertices
+        g.objects.length, // num objects
 
         8, // index where vertices start
         8 + g.vertices.length, // index where object_indices start

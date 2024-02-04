@@ -28,6 +28,28 @@ struct PrimitiveIntersection {
     t: f32
 }
 
+struct Intersection {
+    point: vec4f,
+    normal: vec4f,
+    intersected: bool,
+    t: f32,
+    material_id: i32
+}
+
+struct Material {
+    Ns: f32,
+    Ni: f32,
+    illum: f32,
+    Ka: vec3f,
+    Kd: vec3f,
+    Ks: vec3f,
+    Ke: vec3f
+}
+
+fn null_intersection() -> Intersection {
+    return Intersection(vec4(0.0), vec4(0.0), false, 0.0, 0);
+}
+
 fn eval_ray(ray: Ray, t: f32) -> vec4f {
     return ray.p + ray.d * t;
 }

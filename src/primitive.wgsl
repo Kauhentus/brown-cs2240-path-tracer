@@ -11,7 +11,7 @@ fn null_primitive() -> Primitive {
     return Primitive(vec4f(0), mat4_identity(), mat4_identity(), vec4f(0));
 }
 
-fn null_intersection() -> PrimitiveIntersection {
+fn null_primitive_intersection() -> PrimitiveIntersection {
     return PrimitiveIntersection(null_primitive(), vec4(0), vec4(0), false, 0.0);
 }
 
@@ -112,7 +112,7 @@ fn intersect_unit_cube(primitive: Primitive, r: Ray) -> PrimitiveIntersection {
     if(nT > 0){
         return PrimitiveIntersection(primitive, eval_ray(r, nT), normal, true, nT);
     } else {
-        return null_intersection();
+        return null_primitive_intersection();
     }
 }
 
@@ -123,7 +123,7 @@ fn intersect_unit_sphere(primitive: Primitive, r: Ray) -> PrimitiveIntersection 
             + 2.0f * r.d.z * r.p.z;
     let C = r.p.x * r.p.x + r.p.y * r.p.y + r.p.z * r.p.z - 0.5 * 0.5;
     let discr = B * B - 4 * A * C;
-    if(discr < 0) { return null_intersection(); }
+    if(discr < 0) { return null_primitive_intersection(); }
 
     let t1 = (-B + sqrt(discr))/(2 * A);
     let t2 = (-B - sqrt(discr))/(2 * A);

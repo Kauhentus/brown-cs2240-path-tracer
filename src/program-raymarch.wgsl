@@ -2,6 +2,7 @@
 #include primitive.wgsl 
 #include wgsl-util/hash.wgsl 
 #include wgsl-util/samplers.wgsl 
+#include wgsl-util/triangle-intersection.wgsl 
 
 const PI = 3.14159;
 
@@ -23,7 +24,6 @@ struct OutputData {
 
 @group(0) @binding(0) var<storage, read> meta_data : MetaData;
 @group(0) @binding(1) var<storage, read_write> resultMatrix : OutputData;
-@group(0) @binding(2) var<storage, read> primitives : array<Primitive>;
 
 @group(0) @binding(3) var<storage, read> primitive_0 : array<f32>;
 
@@ -76,32 +76,49 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     resultMatrix.numbers[index] = final_color;
 }
 
-fn intersect_1(cur_ray: Ray) -> PrimitiveIntersection {
+fn intersect(cur_ray: Ray) -> Intersection {
+    let num_vertices = primitive_0[0];
+    let num_objects = primitive_0[1];
+
+    let v_start = i32(primitive_0[2]);
+    let o_start = i32(primitive_0[3]);
+    let m_start = i32(primitive_0[4]);
+    let v_start_offset = v_start;
+
     var closest_intersection = null_intersection();
-    var prev_intersection = null_intersection();
     var closest_t = -1.0;
-    var cur_color = vec3(0.0);
 
-    for(var i = 0u; i < arrayLength(&primitives); i++){
-        let cur_primitive = primitives[i];
-        let ctm_inv = cur_primitive.ctm_inv;
-        let trans_ray = Ray(ctm_inv * cur_ray.p, ctm_inv * cur_ray.d);
+    for(var i = o_start; i < m_start; i += 4){
+        let i0 = (i32(primitive_0[i]) - 1) * 3;
+        let i1 = (i32(primitive_0[i + 1]) - 1) * 3;
+        let i2 = (i32(primitive_0[i + 2]) - 1) * 3;
 
-        var intersection = null_intersection();
-        if(cur_primitive.kind_material.x == 0){
-            intersection = intersect_unit_cube(cur_primitive, trans_ray);
-        } else if(cur_primitive.kind_material.x == 1){
-            intersection = intersect_unit_sphere(cur_primitive, trans_ray);
-        }
+        let v0 = vec3f(
+            primitive_0[v_start_offset + i0], 
+            primitive_0[v_start_offset + i0 + 1], 
+            primitive_0[v_start_offset + i0 + 2], 
+        );
+        let v1 = vec3f(
+            primitive_0[v_start_offset + i1], 
+            primitive_0[v_start_offset + i1 + 1], 
+            primitive_0[v_start_offset + i1 + 2], 
+        );
+        let v2 = vec3f(
+            primitive_0[v_start_offset + i2], 
+            primitive_0[v_start_offset + i2 + 1], 
+            primitive_0[v_start_offset + i2 + 2], 
+        );
+
+        var intersection = ray_triangle_intersection(
+            cur_ray, v0, v1, v2
+        );
 
         if(intersection.intersected){
             if(closest_t < 0 || intersection.t < closest_t){
                 closest_intersection = intersection;
                 closest_t = intersection.t;
 
-                closest_intersection.point = cur_primitive.ctm * closest_intersection.point;
-                let new_normal = (cur_primitive.ctm * vec4<f32>(closest_intersection.normal.xyz, 0.0));
-                closest_intersection.normal = normalize(new_normal);
+                closest_intersection.material_id = i32(primitive_0[i + 3]);
             }
         }
     }
@@ -116,29 +133,28 @@ fn radiance(ray: Ray, seed: i32) -> vec3f {
     var normal_mode = false;
     var prev_intersection = null_intersection();
 
-    for(var j = 0; j < 4; j++){
-        var closest_intersection = intersect_1(cur_ray);
+    for(var j = 0; j < 2; j++){
+        var closest_intersection = intersect(cur_ray);
         var cur_color = vec3(0.0);
 
-        // return if no intersection
         if(!closest_intersection.intersected){ break; }
-        // we have an intersection, proceed!
+        if(normal_mode){ total_color = (normalize(closest_intersection.normal.xyz) + 1.0) * 0.5; break; }
+
+        total_color = vec3(f32(closest_intersection.material_id) * 0.1);
+        break;
 
         // calculate L_e term (emissive material struck!)
-        if(closest_intersection.primitive.temp.y == 1.0){
-            cur_color += closest_intersection.primitive.kind_material.yzw;
-            total_color += cur_color * weight;
-            break;
-        }
+        // if(closest_intersection.primitive.temp.y == 1.0){
+        //     cur_color += closest_intersection.primitive.kind_material.yzw;
+        //     total_color += cur_color * weight;
+        //     break;
+        // }
 
         // calculate reflectance term!
         let cur_ray_sample = sample_hemisphere(closest_intersection.point, closest_intersection.normal, seed);
-
         cur_ray = cur_ray_sample.r; 
         let pdf = cur_ray_sample.pdf;
-
         weight = (1.0 / PI) * (dot(cur_ray.d, closest_intersection.normal)) / pdf;
-
         prev_intersection = closest_intersection;
     }
 

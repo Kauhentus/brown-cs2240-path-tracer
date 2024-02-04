@@ -120,18 +120,19 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
         return packed_array;
     }));
 
-    console.log(gpu_packed_primitives)
-
     // initialize gpu pipeline
-    const x_res = 512 * 1.5;
-    const aspect_ratio = 1.5;
+    // const x_res = 512 * 1.5;
+    // const aspect_ratio = 1.5;
+    const x_res = scene_description.Settings.imageWidth;
+    const aspect_ratio = x_res / scene_description.Settings.imageHeight;
     const round_4 = (n : number) => Math.floor(n / 4) * 4;
     const screenDimension = [round_4(x_res), round_4(x_res / aspect_ratio)];
+    console.log('screendim', screenDimension)
     const mainCanvas = document.getElementById('main-canvas') as HTMLCanvasElement;
     mainCanvas.width = screenDimension[0];
     mainCanvas.height = screenDimension[1];
     const ctx = mainCanvas.getContext('2d') as CanvasRenderingContext2D;
-    programEntry(screenDimension, ctx, gpu_packed_primitives);
+    programEntry(screenDimension, ctx, gpu_packed_primitives, camera_data);
 });
 
 

@@ -19,8 +19,9 @@ export const parse_obj = (obj_data: string, mtl_data: string, ctm: number[]) => 
 
         else if(line.slice(0, 2) === 'v '){
             let data = line.slice(2).trim().split(' ').map(parseFloat);
+            // object_groups.vertices.push(...data);
             let data_trans = mat4_vecmul(ctm, [...data, 1.0]);
-            object_groups.vertices.push(...data_trans);
+            object_groups.vertices.push(...data_trans.slice(0, 3));
         }
 
         else if(line.slice(0, 2) === 'f '){
@@ -31,7 +32,13 @@ export const parse_obj = (obj_data: string, mtl_data: string, ctm: number[]) => 
                 else return num_vertices + i + 1;
             });
 
-            object_groups.objects.at(-1)?.indices.push(...raw_indices)
+            if(raw_indices.length == 3){
+                object_groups.objects.at(-1)?.indices.push(...raw_indices)
+            } else if(raw_indices.length == 4){
+                object_groups.objects.at(-1)?.indices.push(raw_indices[0], raw_indices[1], raw_indices[2])
+                object_groups.objects.at(-1)?.indices.push(raw_indices[0], raw_indices[2], raw_indices[3])
+            } else throw Error("5+ sides encountered")
+
         }
 
         else if(line.slice(0, 6) === 'usemtl'){

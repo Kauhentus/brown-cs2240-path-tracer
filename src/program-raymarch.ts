@@ -1,17 +1,7 @@
 import { mat4_translate, mat4_scale, world_to_camera, mat4_invert, mat4_rot_z, mat4_matmul, mat4_vecmul, mat4_rot_y, sub_v, vec3_dot } from "@toysinbox3dprinting/js-geometry";
 import { loadShaders, preprocessShaders } from "./ts-util/shader-utils";
 import { Vertex } from "@toysinbox3dprinting/js-geometry";
-
-const profiles = [
-    {
-        camera_position: new Vertex(0, 0, 5),
-        camera_look: new Vertex(0, 0, -1),
-        mat4_translate: mat4_translate(0, 0, 0),
-        mat4_scale: mat4_scale(1, 1, 1)
-    },
-];
-const select_profile = 0;
-
+import { CameraData } from "./ts-util/data-structs";
 
 class Material {
     color: number[];
@@ -56,63 +46,24 @@ const materials = {
     purple: new Material([1, 0, 1], false)
 }
 
-const primitives = [
-    new Primitive(
-        1,
-        mat4_matmul(mat4_translate(-0.5 -1, 0, -1), mat4_matmul(mat4_scale(1.5, 1.5, 1.5), mat4_rot_z(0))),
-        materials.blue
-    ),
-    new Primitive(
-        1,
-        mat4_matmul(mat4_translate(0, 0.5 + 1, -0.5), mat4_matmul(mat4_scale(1, 1, 1), mat4_rot_z(0))),
-        materials.yellow
-    ),
-    new Primitive(
-        1,
-        mat4_matmul(mat4_translate(0, -1, -0.5), mat4_matmul(mat4_scale(1, 1, 1), mat4_rot_z(0))),
-        materials.lightwhite
-    ),
-
-
-    new Primitive(
-        0,
-        mat4_matmul(mat4_translate(3, 0, -2), mat4_matmul(mat4_scale(0.5, 6, 6), mat4_rot_z(0))),
-        materials.green
-    ), 
-    new Primitive(
-        0,
-        mat4_matmul(mat4_translate(-3, 0, -2), mat4_matmul(mat4_scale(0.5, 6, 6), mat4_rot_z(0))),
-        materials.red
-    ), 
-    new Primitive(
-        0,
-        mat4_matmul(mat4_translate(0, 0, -2 - 3), mat4_matmul(mat4_scale(6, 6, 0.5), mat4_rot_z(0))),
-        materials.white
-    ), 
-    new Primitive(
-        0,
-        mat4_matmul(mat4_translate(0, -3, -2), mat4_matmul(mat4_scale(6, 0.5, 6), mat4_rot_z(0))),
-        materials.white
-    ), 
-    new Primitive(
-        0,
-        mat4_matmul(mat4_translate(0, 3, -2), mat4_matmul(mat4_scale(6, 0.5, 6), mat4_rot_z(0))),
-        materials.white
-    )
-]
-
 export const programEntry = (
     screenDimension: number[], 
     ctx: CanvasRenderingContext2D, 
-    primitive_data: Float32Array[]
+    primitive_data: Float32Array[],
+    camera_data: CameraData
 ) => {  
     let screen_dimension_inv = [1 / screenDimension[0], 1 / screenDimension[1]];
-    let camera_position = profiles[select_profile].camera_position;
-    let camera_look = profiles[select_profile].camera_look;
-    let FOV = 60;
+    
+    let camera_position = camera_data.pos;
+    let camera_look = new Vertex(0, 0, -1);
+    console.log('cam data', camera_data)
+
+    let FOV = camera_data.heightangle;
+    // TODO: convert to horizontal FOV
+
     let focal_length = 1;
     let aspect_ratio = screenDimension[0] / screenDimension[1];
-    let world_to_cam_mat = world_to_camera(camera_position, camera_look, new Vertex(0, 1, 0));
+    let world_to_cam_mat = world_to_camera(camera_position, camera_look, camera_data.up);
     let cam_to_world_mat = mat4_invert(world_to_cam_mat);
 
     const initGPUCompute = async (shaders: string[]) => {
@@ -143,20 +94,6 @@ export const programEntry = (
         const arrayBufferMetaMatrix = gpuBufferMetaMatrix.getMappedRange();
         new Float32Array(arrayBufferMetaMatrix).set(metaMatrix);
         gpuBufferMetaMatrix.unmap();
-
-        const primitivesData = new Float32Array(primitives.map(p => {
-            let data = p.toPackedArray();
-            console.log(data)
-            return data;
-        }).flat());
-        const primitivesBuffer = device.createBuffer({
-            mappedAtCreation: true,
-            size: primitivesData.byteLength,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        });
-        const primitivesArrayRef = primitivesBuffer.getMappedRange();
-        new Float32Array(primitivesArrayRef).set(primitivesData);
-        primitivesBuffer.unmap();
     
         const resultMatrixBufferSize = 1 * Float32Array.BYTES_PER_ELEMENT * (screenDimension[0] * screenDimension[1]);
         const resultMatrixBuffer = device.createBuffer({
@@ -196,13 +133,6 @@ export const programEntry = (
                         type: "storage"
                     }
                 },
-                {
-                    binding: 2,
-                    visibility: GPUShaderStage.COMPUTE,
-                    buffer: {
-                        type: "read-only-storage"
-                    }
-                },
                 ...packed_primitive_buffers.map((_, i) => ({
                     binding: i + 3,
                     visibility: GPUShaderStage.COMPUTE,
@@ -226,12 +156,6 @@ export const programEntry = (
                     binding: 1,
                     resource: {
                         buffer: resultMatrixBuffer
-                    }
-                },
-                {
-                    binding: 2,
-                    resource: {
-                        buffer: primitivesBuffer
                     }
                 },
                 ...packed_primitive_buffers.map((buffer, i) => ({
@@ -323,7 +247,8 @@ export const programEntry = (
                 sample_runs += 1;
                 for(let i = 0; i < outputData.length; i++){
                     sample_collector[i] += outputData[i];
-                    display_buffer[i] = sample_collector[i] / (sample_runs / 50);
+                    // display_buffer[i] = sample_collector[i] / (sample_runs / 50);
+                    display_buffer[i] = sample_collector[i] / (sample_runs);
                 }
                 imageData.data.set(display_buffer);
                 ctx.putImageData(imageData, 0, 0);
@@ -346,7 +271,8 @@ export const programEntry = (
         '/src/wgsl-util/data-structs.wgsl',
         '/src/primitive.wgsl',
         '/src/wgsl-util/hash.wgsl',
-        '/src/wgsl-util/samplers.wgsl'
+        '/src/wgsl-util/samplers.wgsl',
+        '/src/wgsl-util/triangle-intersection.wgsl',
     ];
 
     loadShaders(shaderPaths).then(shaders => {

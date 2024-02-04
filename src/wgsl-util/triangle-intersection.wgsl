@@ -16,14 +16,14 @@ fn ray_triangle_intersection(r: Ray, v0: vec3f, v1: vec3f, v2: vec3f) -> Interse
     let s = ray_origin - v0;
     let u = inv_det * dot(s, ray_cross_e2);
 
-    if (u < 0 || u > 1){
+    if (u < 0.0 || u > 1.0){
         return null_intersection();
     }
 
     let s_cross_e1 = cross(s, edge1);
     let v = inv_det * dot(ray_vector, s_cross_e1);
 
-    if (v < 0 || u + v > 1){
+    if (v < 0.0 || u + v > 1.0){
         return null_intersection();
     }
 
@@ -33,7 +33,7 @@ fn ray_triangle_intersection(r: Ray, v0: vec3f, v1: vec3f, v2: vec3f) -> Interse
         let out_intersection_point = ray_origin + ray_vector * t;
         return Intersection(
             vec4(out_intersection_point, 1.0), 
-            vec4(cross(edge1, edge2), 0.0), 
+            vec4(normalize(cross(edge1, edge2)), 0.0), 
             true, t, 0
         );
     } else {

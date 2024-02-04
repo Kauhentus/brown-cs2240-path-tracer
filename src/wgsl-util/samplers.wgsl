@@ -32,3 +32,15 @@ fn sample_hemisphere(x: vec4f, n: vec4f, seed: i32) -> RaySample {
     let p = 1.0 / (2.0 * PI);
     return RaySample(ray_with_epsilon(x, vec4(norm_d, 0.0)), p);
 }
+
+fn sample_triangle_2D(seed: u32) -> vec2f {
+    let u = hash2(seed);
+    let su0 = sqrt(u.x);
+    return vec2(1 - su0, u.y * su0);
+}
+
+fn sample_triangle_3D(p0: vec3f, p1: vec3f, p2: vec3f, seed: u32) -> vec3f {
+    let b = sample_triangle_2D(seed);
+    let p = b.x * p0 + b.y * p1 + (1 - b.x - b.y) * p2;
+    return p;
+}

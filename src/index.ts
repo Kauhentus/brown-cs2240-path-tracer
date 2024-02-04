@@ -82,7 +82,7 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
         } 
         
         else if(obj._attributes.type === "primitive") {
-            console.log(obj)
+            // console.log(obj)
             let primitive: SceneObjectNode = {
                 type: "primitive",
                 name: obj._attributes.name,
@@ -99,7 +99,7 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
         else throw Error("unknown type of object " + obj._attributes.type + " to parse");
     }
     const object_nodes: SceneObjectNode[] = raw_object_nodes.map(o => traverse_object_node(o, mat4_scale(1, 1, 1)));
-    console.log(final_primitives);
+    // console.log(final_primitives);
 
     // pack extracted primitives into buffers for the GPU
     const gpu_packed_primitives = await Promise.all(final_primitives.slice(0, 1).map(async (p) => {

@@ -247,7 +247,7 @@ export const programEntry = (
                 sample_runs += 1;
                 for(let i = 0; i < outputData.length; i++){
                     sample_collector[i] += outputData[i];
-                    display_buffer[i] = sample_collector[i] / (sample_runs / 5);
+                    display_buffer[i] = sample_collector[i] / (sample_runs / 4);
                     // display_buffer[i] = sample_collector[i] / (sample_runs);
                 }
                 imageData.data.set(display_buffer);
@@ -259,7 +259,7 @@ export const programEntry = (
 
             setTimeout(() => {
                 requestAnimationFrame(render_loop);
-            }, 100);
+            }, 250);
         };
         render_loop();
 

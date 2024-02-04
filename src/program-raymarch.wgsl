@@ -143,41 +143,126 @@ fn intersect(cur_ray: Ray) -> Intersection {
     return closest_intersection;
 }
 
-fn radiance(ray: Ray, seed: i32) -> vec3f {
-    var cur_ray = ray;
-    var total_color = vec3(0.0);
-    var color_potential = vec3(1.0);
-    var weight = 1.0;
-    var normal_mode = false;
-    var prev_intersection = null_intersection();
-    var hit_light = false;
+fn sample_area_lights(x: vec3f, seed: i32) -> vec3f {
+    let e1_start = i32(primitive_0[8]);
+    let e1_end = i32(primitive_0[9]);
+    let e2_start = i32(primitive_0[10]);
+    let e2_end = i32(primitive_0[11]);
+    let e3_start = i32(primitive_0[12]);
+    let e3_end = i32(primitive_0[13]);
+    let e4_start = i32(primitive_0[14]);
+    let e4_end = i32(primitive_0[15]);
 
-    for(var j = 0; j < 2; j++){
-        var closest_intersection = intersect(cur_ray);
+    var num_emissive = 0;
+    var num_e1_triangles = 0;
+    var num_e2_triangles = 0;
+    var num_e3_triangles = 0;
+    var num_e4_triangles = 0;
+    if(e1_start != -1) { num_emissive += 1; num_e1_triangles += (e1_end - e1_start) / 4; }
+    if(e2_start != -1) { num_emissive += 1; num_e2_triangles += (e2_end - e2_start) / 4; }
+    if(e3_start != -1) { num_emissive += 1; num_e3_triangles += (e3_end - e3_start) / 4; }
+    if(e4_start != -1) { num_emissive += 1; num_e4_triangles += (e4_end - e4_start) / 4; }
 
-        if(normal_mode){ total_color = (normalize(closest_intersection.normal.xyz) + 1.0) * 0.5; break; }
-        if(!closest_intersection.intersected){ total_color = vec3(0.0); break; }
+    // TODO: do better than choosing a random triangle
+    var num_triangles = num_e1_triangles + num_e2_triangles + num_e3_triangles + num_e4_triangles;
+    var random_triangle = i32(hash1(u32(seed) * 7u + 11u) * f32(num_triangles));
 
-        let cur_material = get_material(closest_intersection.material_id);
-
-        // calculate L_e term (emissive material struck!)
-        if(j == 1 && dot(cur_material.Ke, vec3f(1.0)) > 0){
-            total_color = color_potential * cur_material.Ke;
-            break;
-        } else {
-            color_potential.x += cur_material.Kd.x;
-            color_potential.y += cur_material.Kd.y;
-            color_potential.z += cur_material.Kd.z;
-        }
-
-        // calculate reflectance term!
-        let cur_ray_sample = sample_hemisphere(closest_intersection.point, closest_intersection.normal, seed);
-        cur_ray = cur_ray_sample.r; 
-        let pdf = cur_ray_sample.pdf;
-        weight = (1.0 / (PI)) * (dot(cur_ray.d, closest_intersection.normal)) / pdf;
-        prev_intersection = closest_intersection;
+    var actual_index = 0;
+    if(random_triangle < num_e1_triangles){
+        let triangle_region_index = random_triangle;
+        actual_index = triangle_region_index * 4 + e1_start;
+    } 
+    else if(random_triangle < num_e1_triangles + num_e2_triangles){
+        let triangle_region_index = random_triangle - num_e1_triangles;
+        actual_index = triangle_region_index * 4 + e2_start;
+    } 
+    else if(random_triangle < num_e1_triangles + num_e2_triangles + num_e3_triangles){
+        let triangle_region_index = random_triangle - num_e1_triangles - num_e2_triangles;
+        actual_index = triangle_region_index * 4 + e3_start;
+    } 
+    else {
+        let triangle_region_index = random_triangle - num_e1_triangles - num_e2_triangles - num_e3_triangles;
+        actual_index = triangle_region_index * 4 + e4_start;
     }
 
-    return total_color;
+    // get triangle vertices
+    let v_start_offset = i32(primitive_0[2]);
+    let i0 = (i32(primitive_0[actual_index]) - 1) * 3;
+    let i1 = (i32(primitive_0[actual_index + 1]) - 1) * 3;
+    let i2 = (i32(primitive_0[actual_index + 2]) - 1) * 3;
+
+    let v0 = vec3f(
+        primitive_0[v_start_offset + i0], 
+        primitive_0[v_start_offset + i0 + 1], 
+        primitive_0[v_start_offset + i0 + 2], 
+    );
+    let v1 = vec3f(
+        primitive_0[v_start_offset + i1], 
+        primitive_0[v_start_offset + i1 + 1], 
+        primitive_0[v_start_offset + i1 + 2], 
+    );
+    let v2 = vec3f(
+        primitive_0[v_start_offset + i2], 
+        primitive_0[v_start_offset + i2 + 1], 
+        primitive_0[v_start_offset + i2 + 2], 
+    );
+
+    let rand_pt_on_tri = sample_triangle_3D(v0, v1, v2, u32(seed) * 11u + 17u);
+
+    let direction = normalize(rand_pt_on_tri - x);
+    return direction;
+}
+
+fn radiance(_ray: Ray, seed: i32) -> vec3f {
+    var L = vec3(0.0);
+    var beta = 1.0;
+    var depth = 0;
+    var ray = _ray;
+
+    while(beta > 0.1 && depth <= 4){
+        var closest_intersection = intersect(ray);
+        if(!closest_intersection.intersected){
+            break;
+        }
+
+        let cur_material = get_material(closest_intersection.material_id);
+        let cur_normal = closest_intersection.normal;
+        let cur_pt = closest_intersection.point;
+
+        // calculate emissive contribution
+        if(dot(cur_material.Ke, vec3f(1.0)) > 0){ 
+            L += beta * cur_material.Ke;
+        }
+
+        // TODO: sample lights for direct illumination
+        // let light_direction = normalize(vec3(1, 1, 1));
+        // let to_light_test = intersect(ray_with_epsilon(cur_pt + cur_normal * 1.0e-2, vec4(light_direction, 0.0)));
+        // if(!to_light_test.intersected){
+        //     L += beta * cur_material.Kd * vec3(1.0, 0.95, 0.9);
+        // }
+        let offset_pt = cur_pt + cur_normal * 1.0e-2;
+        let light_direction = sample_area_lights(offset_pt.xyz, seed);
+        let to_light_test = intersect(ray_with_epsilon(offset_pt, vec4(light_direction, 0.0)));
+        if(to_light_test.intersected){
+            let new_material = get_material(to_light_test.material_id);
+            if(dot(new_material.Ke, vec3f(1.0)) > 0){ 
+                L += beta * cur_material.Kd * dot(cur_normal.xyz, light_direction) * 0.5;
+            }
+        }
+
+        // sample outgoing direction to continue path
+        let sample = sample_hemisphere(cur_pt, cur_normal, seed);
+        let new_ray = sample.r;
+        let new_pdf = sample.pdf;
+
+        beta *= dot(new_ray.d, cur_normal);
+        if(dot(new_ray.d, cur_normal) < 0.0){
+            // return vec3(0.0);
+        }
+        ray = new_ray;
+        depth += 1;
+    }
+
+    return L;
 }
 

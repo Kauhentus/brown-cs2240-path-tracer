@@ -76,6 +76,23 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     resultMatrix.numbers[index] = final_color;
 }
 
+fn get_material(material_id: i32) -> Material {
+    let m_start = i32(primitive_0[4]);
+    let offset = material_id * 15;
+    let m = m_start + offset;
+
+    return Material(
+        primitive_0[m],
+        primitive_0[m + 1],
+        primitive_0[m + 2],
+
+        vec3f(primitive_0[m + 3], primitive_0[m + 4], primitive_0[m + 5]),
+        vec3f(primitive_0[m + 6], primitive_0[m + 7], primitive_0[m + 8]),
+        vec3f(primitive_0[m + 9], primitive_0[m + 10], primitive_0[m + 11]),
+        vec3f(primitive_0[m + 12], primitive_0[m + 13], primitive_0[m + 14]),
+    );
+}
+
 fn intersect(cur_ray: Ray) -> Intersection {
     let num_vertices = primitive_0[0];
     let num_objects = primitive_0[1];
@@ -129,32 +146,35 @@ fn intersect(cur_ray: Ray) -> Intersection {
 fn radiance(ray: Ray, seed: i32) -> vec3f {
     var cur_ray = ray;
     var total_color = vec3(0.0);
+    var color_potential = vec3(1.0);
     var weight = 1.0;
     var normal_mode = false;
     var prev_intersection = null_intersection();
+    var hit_light = false;
 
     for(var j = 0; j < 2; j++){
         var closest_intersection = intersect(cur_ray);
-        var cur_color = vec3(0.0);
 
-        if(!closest_intersection.intersected){ break; }
         if(normal_mode){ total_color = (normalize(closest_intersection.normal.xyz) + 1.0) * 0.5; break; }
+        if(!closest_intersection.intersected){ total_color = vec3(0.0); break; }
 
-        total_color = vec3(f32(closest_intersection.material_id) * 0.1);
-        break;
+        let cur_material = get_material(closest_intersection.material_id);
 
         // calculate L_e term (emissive material struck!)
-        // if(closest_intersection.primitive.temp.y == 1.0){
-        //     cur_color += closest_intersection.primitive.kind_material.yzw;
-        //     total_color += cur_color * weight;
-        //     break;
-        // }
+        if(j == 1 && dot(cur_material.Ke, vec3f(1.0)) > 0){
+            total_color = color_potential * cur_material.Ke;
+            break;
+        } else {
+            color_potential.x += cur_material.Kd.x;
+            color_potential.y += cur_material.Kd.y;
+            color_potential.z += cur_material.Kd.z;
+        }
 
         // calculate reflectance term!
         let cur_ray_sample = sample_hemisphere(closest_intersection.point, closest_intersection.normal, seed);
         cur_ray = cur_ray_sample.r; 
         let pdf = cur_ray_sample.pdf;
-        weight = (1.0 / PI) * (dot(cur_ray.d, closest_intersection.normal)) / pdf;
+        weight = (1.0 / (PI)) * (dot(cur_ray.d, closest_intersection.normal)) / pdf;
         prev_intersection = closest_intersection;
     }
 

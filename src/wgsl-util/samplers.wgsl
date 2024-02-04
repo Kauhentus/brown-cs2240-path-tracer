@@ -29,6 +29,6 @@ fn sample_hemisphere(x: vec4f, n: vec4f, seed: i32) -> RaySample {
     }
     norm_d = normalize(norm_d);
 
-    let p = 1.0 / 2.0 * PI;
+    let p = 1.0 / (2.0 * PI);
     return RaySample(ray_with_epsilon(x, vec4(norm_d, 0.0)), p);
 }

@@ -247,8 +247,8 @@ export const programEntry = (
                 sample_runs += 1;
                 for(let i = 0; i < outputData.length; i++){
                     sample_collector[i] += outputData[i];
-                    // display_buffer[i] = sample_collector[i] / (sample_runs / 50);
-                    display_buffer[i] = sample_collector[i] / (sample_runs);
+                    display_buffer[i] = sample_collector[i] / (sample_runs / 5);
+                    // display_buffer[i] = sample_collector[i] / (sample_runs);
                 }
                 imageData.data.set(display_buffer);
                 ctx.putImageData(imageData, 0, 0);

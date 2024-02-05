@@ -3,10 +3,11 @@ import { programEntry } from "./program-raymarch";
 import { ini_file_to_ini_scene, parse_ini_file } from "./ts-util/parse-ini";
 import * as convert from "xml-js";
 import { CameraData, SceneObjectNode } from "./ts-util/data-structs";
-import { Vertex, mat4_clone, mat4_matmul, mat4_rot_y, mat4_scale, mat4_translate } from "@toysinbox3dprinting/js-geometry";
-import { mat4_rot_axis } from "./ts-util/math";
+import { Triangle, Vertex, mat4_clone, mat4_matmul, mat4_rot_y, mat4_scale, mat4_translate } from "@toysinbox3dprinting/js-geometry";
+import { bounds_of_vec3, chunk_into_3, mat4_rot_axis } from "./ts-util/math";
 import { parse_obj } from "./ts-util/parse-obj";
 import { pack_scene_object_group } from "./packer";
+import { BVH, BVHObject } from "./ts-util/bvh";
 
 // import { init_three } from "@toysinbox3dprinting/js-geometry";
 // init_three();
@@ -99,7 +100,6 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
         else throw Error("unknown type of object " + obj._attributes.type + " to parse");
     }
     const object_nodes: SceneObjectNode[] = raw_object_nodes.map(o => traverse_object_node(o, mat4_scale(1, 1, 1)));
-    // console.log(final_primitives);
 
     // pack extracted primitives into buffers for the GPU
     const gpu_packed_primitives = await Promise.all(final_primitives.slice(0, 1).map(async (p) => {
@@ -115,6 +115,38 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
         }
 
         const intermediate = parse_obj(obj_data, mtl_data, p.ctm);
+        const vertices = intermediate.vertices;
+        const bvh_bounds = bounds_of_vec3(chunk_into_3(vertices));
+        const bvh_objects = intermediate.objects.map(o => {
+            const indices = o.indices;
+            const objects: BVHObject[] = [];
+
+            for(let i = 0; i < indices.length; i += 3){
+                let i0 = (indices[i] - 1) * 3;
+                let i1 = (indices[i + 1] - 1) * 3;
+                let i2 = (indices[i + 2] - 1) * 3;
+
+                let v0 = [vertices[i0], vertices[i0 + 1], vertices[i0 + 2]];
+                let v1 = [vertices[i1], vertices[i1 + 1], vertices[i1 + 2]];
+                let v2 = [vertices[i2], vertices[i2 + 1], vertices[i2 + 2]];
+
+                let tri = [v0, v1, v2];
+                let tri_bounds = bounds_of_vec3(tri);
+                objects.push({
+                    obj: [indices[i], indices[i + 1], indices[i + 2]],
+                    bounds: tri_bounds
+                });
+            }
+
+            return objects;
+        }).flat();
+
+        const bvh = new BVH(bvh_objects, bvh_bounds);
+        bvh.construct();
+        console.log(bvh);
+
+        console.log(bvh_objects);
+
         const packed_array = pack_scene_object_group(intermediate);
         
         return packed_array;

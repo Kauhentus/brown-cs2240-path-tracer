@@ -1,3 +1,4 @@
+import { BVH } from "./ts-util/bvh";
 import { SceneObjectGroup, SceneObjectMaterial } from "./ts-util/data-structs";
 
 export const pack_scene_object_group = (g: SceneObjectGroup) => {
@@ -73,4 +74,8 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
     group = group.concat(end_padding);
 
     return new Float32Array(group);
+}
+
+export const pack_bvh = (bvh: BVH) => {
+
 }

@@ -247,8 +247,8 @@ export const programEntry = (
                 sample_runs += 1;
                 for(let i = 0; i < outputData.length; i++){
                     sample_collector[i] += outputData[i];
+                    // display_buffer[i] = sample_collector[i] / (sample_runs / 2);
                     display_buffer[i] = sample_collector[i] / (sample_runs / 4);
-                    // display_buffer[i] = sample_collector[i] / (sample_runs);
                 }
                 imageData.data.set(display_buffer);
                 ctx.putImageData(imageData, 0, 0);
@@ -258,7 +258,7 @@ export const programEntry = (
             })
 
             setTimeout(() => {
-                requestAnimationFrame(render_loop);
+                // requestAnimationFrame(render_loop);
             }, 250);
         };
         render_loop();

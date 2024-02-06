@@ -96,7 +96,7 @@ export const programEntry = (
         new Float32Array(arrayBufferMetaMatrix).set(metaMatrix);
         gpuBufferMetaMatrix.unmap();
     
-        const resultMatrixBufferSize = 1 * Float32Array.BYTES_PER_ELEMENT * (screenDimension[0] * screenDimension[1]);
+        const resultMatrixBufferSize = 3 * Float32Array.BYTES_PER_ELEMENT * (screenDimension[0] * screenDimension[1]);
         const resultMatrixBuffer = device.createBuffer({
             size: resultMatrixBufferSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
@@ -126,7 +126,7 @@ export const programEntry = (
             return packed_buffer;
         });
 
-        const sample_collector = new Int32Array(screenDimension[0] * screenDimension[1] * 4);
+        const sample_collector = new Float32Array(screenDimension[0] * screenDimension[1] * 3);
         const display_buffer = new Uint8ClampedArray(screenDimension[0] * screenDimension[1] * 4);
         let sample_runs = 0;
     
@@ -268,26 +268,44 @@ export const programEntry = (
             // read data and put onto screen
             gpuReadBuffer.mapAsync(GPUMapMode.READ).then(() => {
                 const arrayBuffer = gpuReadBuffer.getMappedRange();
-                const outputData = new Uint8ClampedArray(arrayBuffer);
-                // imageData.data.set(outputData);
-                // ctx.putImageData(imageData, 0, 0);
+                const outputData = new Float32Array(arrayBuffer);
                 
                 sample_runs += 1;
-                for(let i = 0; i < outputData.length; i++){
-                    sample_collector[i] += outputData[i];
-                    // display_buffer[i] = sample_collector[i] / (sample_runs / 2);
-                    display_buffer[i] = sample_collector[i] / (sample_runs / 8);
+                let num_pixels = outputData.length / 3;
+                let reinhard = 0;
+                
+                for(let i = 0; i < num_pixels; i++){
+                    let i3 = i * 3;
+                    let i4 = i * 4;
+                    sample_collector[i3] += outputData[i3];
+                    sample_collector[i3 + 1] += outputData[i3 + 1];
+                    sample_collector[i3 + 2] += outputData[i3 + 2];
+
+                    let raw_r = sample_collector[i3] / sample_runs;
+                    let raw_g = sample_collector[i3 + 1] / sample_runs;
+                    let raw_b = sample_collector[i3 + 2] / sample_runs;
+
+                    // let lum_i = (raw_r + raw_g + raw_b) / 3.0;
+                    // let lum_o = lum_i / (1.0 + lum_i);
+                    // reinhard = lum_o;
+                    let lum_o = 2;
+
+                    display_buffer[i4] = (raw_r * lum_o * 255) | 0;
+                    display_buffer[i4 + 1] = (raw_g * lum_o * 255) | 0;
+                    display_buffer[i4 + 2] = (raw_b * lum_o * 255) | 0;
+                    display_buffer[i4 + 3] = 255;
                 }
                 imageData.data.set(display_buffer);
                 ctx.putImageData(imageData, 0, 0);
+                console.log('rein', reinhard)
 
                 gpuReadBuffer.unmap();
                 gpuReadBuffer.destroy();
             })
 
-            // setTimeout(() => {
+            setTimeout(() => {
                 requestAnimationFrame(render_loop);
-            // }, 250);
+            }, 250);
         };
         render_loop();
 

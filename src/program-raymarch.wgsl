@@ -20,7 +20,7 @@ struct MetaData {
 }
 
 struct OutputData {
-    numbers: array<u32>,
+    numbers: array<f32>,
 }
 
 @group(0) @binding(0) var<storage, read> meta_data : MetaData;
@@ -71,16 +71,9 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     }
     total_color *= 1.0 / f32(num_samples);
 
-    let luminance = (total_color.x + total_color.y + total_color.z) / 3.0;
-    let reinhard_operator = luminance / (1.0 + luminance);
-    let tonemapped_color = total_color * reinhard_operator;
-
-    var r: u32 = clamp(u32(tonemapped_color.x * 255), 0u, 255u);
-    var g: u32 = clamp(u32(tonemapped_color.y * 255), 0u, 255u);
-    var b: u32 = clamp(u32(tonemapped_color.z * 255), 0u, 255u);
-    let final_color = (255 << 24) + (b << 16) + (g << 8) + r;
-
-    resultMatrix.numbers[index] = final_color;
+    resultMatrix.numbers[index * 3] = total_color.x;
+    resultMatrix.numbers[index * 3 + 1] = total_color.y;
+    resultMatrix.numbers[index * 3 + 2] = total_color.z;
 }
 
 fn get_material(material_id: i32) -> Material {
@@ -199,8 +192,8 @@ fn intersect(cur_ray: Ray) -> Intersection {
 
         var left_intersect = ray_bbox_intersection(cur_ray, left_min, left_max);
         var right_intersect = ray_bbox_intersection(cur_ray, right_min, right_max);
-        left_intersect = true;
-        right_intersect = true;
+        // left_intersect = true;
+        // right_intersect = true;
 
         var left_overlaps = false;
         var left_is_leaf = false;

@@ -1,4 +1,4 @@
-import { BVH } from "./ts-util/bvh";
+import { BVH, BVHNode } from "./ts-util/bvh";
 import { SceneObjectGroup, SceneObjectMaterial } from "./ts-util/data-structs";
 
 export const pack_scene_object_group = (g: SceneObjectGroup) => {
@@ -28,9 +28,9 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
     let emissive_offsets = emissive_object_ids.map(i => {
         return [object_offsets[i], object_offsets[i] + object_sizes[i]];
     });
-    console.log(object_offsets)
-    console.log(emissive_offsets)
-    console.log(emissive_offsets[0], emissive_offsets[2])
+    // console.log(object_offsets)
+    // console.log(emissive_offsets)
+    // console.log(emissive_offsets[0], emissive_offsets[2])
     
     // pack and parse material data
     let object_materials = g.objects.map(o => o.material as SceneObjectMaterial)
@@ -76,6 +76,54 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
     return new Float32Array(group);
 }
 
-export const pack_bvh = (bvh: BVH) => {
+export const pack_bvh = (bvh: BVH<number[]>) => {
+    const result: number[] = [
+        ...bvh.outer_bounds.min.toArray(),
+        ...bvh.outer_bounds.max.toArray(),
+    ];
 
+    let num_objects = 0;
+
+    // node data
+    // 0, 0,          is_leaf, axis
+    // 0, 0,          left child index, right child index
+    // n,             num nodes
+    // [0, 0, 0]x n   indices for triangle
+    const recurse = (node: BVHNode<number[]>) => {
+        let is_leaf = node.is_leaf;
+        let children = is_leaf ? node.objects.map(o => o.obj).flat() : [];
+        let num_children = children.length;
+
+        let cur_offset = result.length;
+        let left_node_offset = cur_offset + 5 + children.length;
+        let right_node_offset_index = cur_offset + 3;
+
+        if(is_leaf) num_objects += children.length / 4;
+
+        result.push(
+            is_leaf ? 1 : 0, 
+            node.axis,
+
+            is_leaf ? -1 : left_node_offset, // left node index
+            -1, // right node index
+
+            is_leaf ? num_children : -2,
+            ...children
+        );
+
+        if(!is_leaf && node.left_child) recurse(node.left_child);
+
+        if(!is_leaf && node.right_child) {
+            let right_node_offset = result.length;
+            result[right_node_offset_index] = right_node_offset;
+            recurse(node.right_child);
+        }
+    }
+    
+    recurse(bvh.root);
+
+    // console.log(result);
+    // console.log(num_objects);
+
+    return new Float32Array(result);
 }

@@ -2,7 +2,8 @@
 #include primitive.wgsl 
 #include wgsl-util/hash.wgsl 
 #include wgsl-util/samplers.wgsl 
-#include wgsl-util/triangle-intersection.wgsl 
+#include wgsl-util/ray-triangle-intersection.wgsl 
+#include wgsl-util/ray-bbox-intersection.wgsl 
 
 const PI = 3.14159;
 
@@ -26,6 +27,8 @@ struct OutputData {
 @group(0) @binding(1) var<storage, read_write> resultMatrix : OutputData;
 
 @group(0) @binding(3) var<storage, read> primitive_0 : array<f32>;
+
+@group(0) @binding(10) var<storage, read> bvh_0 : array<f32>;
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_id : vec3u) {
@@ -68,9 +71,13 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     }
     total_color *= 1.0 / f32(num_samples);
 
-    let r: u32 = u32(total_color.x * 255);
-    let g: u32 = u32(total_color.y * 255);
-    let b: u32 = u32(total_color.z * 255);
+    let luminance = (total_color.x + total_color.y + total_color.z) / 3.0;
+    let reinhard_operator = luminance / (1.0 + luminance);
+    let tonemapped_color = total_color * reinhard_operator;
+
+    var r: u32 = clamp(u32(total_color.x * 255), 0u, 255u);
+    var g: u32 = clamp(u32(total_color.y * 255), 0u, 255u);
+    var b: u32 = clamp(u32(total_color.z * 255), 0u, 255u);
     let final_color = (255 << 24) + (b << 16) + (g << 8) + r;
 
     resultMatrix.numbers[index] = final_color;
@@ -94,48 +101,256 @@ fn get_material(material_id: i32) -> Material {
 }
 
 fn intersect(cur_ray: Ray) -> Intersection {
+    // first intersect BVH to find candidate triangles
+    var cur_min = vec3(bvh_0[0], bvh_0[1], bvh_0[2]);
+    var cur_max = vec3(bvh_0[3], bvh_0[4], bvh_0[5]);
+    var cur_depth = 0;
+
+    var stack = array( 
+        6, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+    );
+    var stack_pointer = 0;
+    var bounds_stack = array( 
+        cur_min.x, cur_min.y, cur_min.z, cur_max.x, cur_max.y, cur_max.z,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+    );
+    var bounds_stack_pointer = 0;
+
+    var leaf_flags = array( 
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+    );
+    var num_leaves = 0;
+
+    while(stack_pointer > -1 && cur_depth < 256){
+        let pointer = stack[stack_pointer];
+        let cur_is_leaf = bvh_0[pointer] == 1;
+        let cur_axis = bvh_0[pointer + 1];
+
+        let left_min = vec3f(
+            bounds_stack[bounds_stack_pointer * 6],
+            bounds_stack[bounds_stack_pointer * 6 + 1],
+            bounds_stack[bounds_stack_pointer * 6 + 2],
+        );
+        let right_max = vec3f(
+            bounds_stack[bounds_stack_pointer * 6 + 3],
+            bounds_stack[bounds_stack_pointer * 6 + 4],
+            bounds_stack[bounds_stack_pointer * 6 + 5],
+        );
+        // let left_min = cur_min;
+        // let right_max = cur_max;
+        
+        let left_max = select(
+            vec3((left_min.x + right_max.x) * 0.5, right_max.y, right_max.z),
+            select(
+                vec3(right_max.x, (left_min.y + right_max.y) * 0.5, right_max.z),
+                vec3(right_max.x, right_max.y, (left_min.z + right_max.z) * 0.5),
+                cur_axis == 1.0
+            ),
+            cur_axis == 0.0
+        );
+        let right_min = select(
+            vec3((left_min.x + right_max.x) * 0.5, left_min.y, left_min.z),
+            select(
+                vec3(left_min.x, (left_min.y + right_max.y) * 0.5, left_min.z),
+                vec3(left_min.x, left_min.y, (left_min.z + right_max.z) * 0.5),
+                cur_axis == 1.0
+            ),
+            cur_axis == 0.0
+        );
+
+        var left_intersect = ray_bbox_intersection(cur_ray, left_min, left_max);
+        var right_intersect = ray_bbox_intersection(cur_ray, right_min, right_max);
+        left_intersect = true;
+        right_intersect = true;
+
+        var left_overlaps = false;
+        var left_is_leaf = false;
+        var right_overlaps = false;
+        var right_is_leaf = false;
+
+        if(left_intersect){
+            left_overlaps = true;
+            let left_pointer = i32(bvh_0[pointer + 2]);
+            let is_leaf = bvh_0[left_pointer] == 1;
+
+            if(is_leaf){
+                left_is_leaf = true;
+                leaf_flags[num_leaves] = left_pointer;
+                num_leaves += 1;
+            }
+        }
+
+        if(right_intersect){
+            right_overlaps = true;
+            let right_pointer = i32(bvh_0[pointer + 3]);
+            let is_leaf = bvh_0[right_pointer] == 1;
+
+            if(is_leaf){
+                right_is_leaf = true;
+                leaf_flags[num_leaves] = right_pointer;
+                num_leaves += 1;
+            }
+        }
+
+        let traverse_left = left_overlaps && !left_is_leaf;
+        let traverse_right = right_overlaps && !right_is_leaf;
+
+        if(!traverse_left && !traverse_right){
+            stack_pointer -= 1;
+            bounds_stack_pointer -= 1;
+            if(stack_pointer < 0){ break; }
+                
+            while(stack[stack_pointer] == -1){
+                stack_pointer -= 1;
+                bounds_stack_pointer -= 1;
+                if(stack_pointer < 0){ break; }
+            }
+        } else {
+            stack[stack_pointer] = -1; 
+
+            if(traverse_left && !traverse_right){
+                stack_pointer += 1;
+                stack[stack_pointer] = i32(bvh_0[pointer + 2]);
+
+                bounds_stack_pointer += 1;
+                bounds_stack[bounds_stack_pointer * 6] = left_min.x;
+                bounds_stack[bounds_stack_pointer * 6 + 1] = left_min.y;
+                bounds_stack[bounds_stack_pointer * 6 + 2] = left_min.z;
+                bounds_stack[bounds_stack_pointer * 6 + 3] = left_max.x;
+                bounds_stack[bounds_stack_pointer * 6 + 4] = left_max.y;
+                bounds_stack[bounds_stack_pointer * 6 + 5] = left_max.z;
+            } 
+            
+            else if(!traverse_left && traverse_right){
+                stack_pointer += 1;
+                stack[stack_pointer] = i32(bvh_0[pointer + 3]);
+
+                bounds_stack_pointer += 1;
+                bounds_stack[bounds_stack_pointer * 6] = right_min.x;
+                bounds_stack[bounds_stack_pointer * 6 + 1] = right_min.y;
+                bounds_stack[bounds_stack_pointer * 6 + 2] = right_min.z;
+                bounds_stack[bounds_stack_pointer * 6 + 3] = right_max.x;
+                bounds_stack[bounds_stack_pointer * 6 + 4] = right_max.y;
+                bounds_stack[bounds_stack_pointer * 6 + 5] = right_max.z;
+            } 
+            
+            else { // traverse both
+                stack_pointer += 1;
+                stack[stack_pointer] = i32(bvh_0[pointer + 2]);
+                stack_pointer += 1;
+                stack[stack_pointer] = i32(bvh_0[pointer + 3]);
+
+                bounds_stack_pointer += 1;
+                bounds_stack[bounds_stack_pointer * 6] = left_min.x;
+                bounds_stack[bounds_stack_pointer * 6 + 1] = left_min.y;
+                bounds_stack[bounds_stack_pointer * 6 + 2] = left_min.z;
+                bounds_stack[bounds_stack_pointer * 6 + 3] = left_max.x;
+                bounds_stack[bounds_stack_pointer * 6 + 4] = left_max.y;
+                bounds_stack[bounds_stack_pointer * 6 + 5] = left_max.z;
+
+                bounds_stack_pointer += 1;
+                bounds_stack[bounds_stack_pointer * 6] = right_min.x;
+                bounds_stack[bounds_stack_pointer * 6 + 1] = right_min.y;
+                bounds_stack[bounds_stack_pointer * 6 + 2] = right_min.z;
+                bounds_stack[bounds_stack_pointer * 6 + 3] = right_max.x;
+                bounds_stack[bounds_stack_pointer * 6 + 4] = right_max.y;
+                bounds_stack[bounds_stack_pointer * 6 + 5] = right_max.z;
+            }
+        }
+
+        cur_depth += 1;
+    }
+
+    // if(stack_pointer == -1) { return null_intersection(); }
+    // if(cur_depth > 2) { return null_intersection(); }
+    // if(num_leaves == 4) { return null_intersection(); }
+
     let num_vertices = primitive_0[0];
     let num_objects = primitive_0[1];
-
-    let v_start = i32(primitive_0[2]);
-    let o_start = i32(primitive_0[3]);
-    let m_start = i32(primitive_0[4]);
-    let v_start_offset = v_start;
 
     var closest_intersection = null_intersection();
     var closest_t = -1.0;
 
-    for(var i = o_start; i < m_start; i += 4){
-        let i0 = (i32(primitive_0[i]) - 1) * 3;
-        let i1 = (i32(primitive_0[i + 1]) - 1) * 3;
-        let i2 = (i32(primitive_0[i + 2]) - 1) * 3;
+    for(var n = 0; n < num_leaves; n++){
+        let pointer = leaf_flags[n];
+        let num_triangles = bvh_0[pointer + 4];
+        let bvh_o_start = pointer + 5;
+        let bvh_o_end = bvh_o_start + i32(num_triangles);
 
-        let v0 = vec3f(
-            primitive_0[v_start_offset + i0], 
-            primitive_0[v_start_offset + i0 + 1], 
-            primitive_0[v_start_offset + i0 + 2], 
-        );
-        let v1 = vec3f(
-            primitive_0[v_start_offset + i1], 
-            primitive_0[v_start_offset + i1 + 1], 
-            primitive_0[v_start_offset + i1 + 2], 
-        );
-        let v2 = vec3f(
-            primitive_0[v_start_offset + i2], 
-            primitive_0[v_start_offset + i2 + 1], 
-            primitive_0[v_start_offset + i2 + 2], 
-        );
+        let o_start = i32(primitive_0[3]);
+        let v_start_offset = i32(primitive_0[2]);
 
-        var intersection = ray_triangle_intersection(
-            cur_ray, v0, v1, v2
-        );
+        for(var i = bvh_o_start; i < bvh_o_end; i += 4){
+            let i0 = (i32(bvh_0[i]) - 1) * 3;
+            let i1 = (i32(bvh_0[i + 1]) - 1) * 3;
+            let i2 = (i32(bvh_0[i + 2]) - 1) * 3;
 
-        if(intersection.intersected){
-            if(closest_t < 0 || intersection.t < closest_t){
-                closest_intersection = intersection;
-                closest_t = intersection.t;
+            let v0 = vec3f(
+                primitive_0[v_start_offset + i0], 
+                primitive_0[v_start_offset + i0 + 1], 
+                primitive_0[v_start_offset + i0 + 2], 
+            );
+            let v1 = vec3f(
+                primitive_0[v_start_offset + i1], 
+                primitive_0[v_start_offset + i1 + 1], 
+                primitive_0[v_start_offset + i1 + 2], 
+            );
+            let v2 = vec3f(
+                primitive_0[v_start_offset + i2], 
+                primitive_0[v_start_offset + i2 + 1], 
+                primitive_0[v_start_offset + i2 + 2], 
+            );
 
-                closest_intersection.material_id = i32(primitive_0[i + 3]);
+            var intersection = ray_triangle_intersection(
+                cur_ray, v0, v1, v2
+            );
+
+            if(intersection.intersected){
+                if(closest_t < 0 || intersection.t < closest_t){
+                    closest_intersection = intersection;
+                    closest_t = intersection.t;
+
+                    closest_intersection.material_id = i32(bvh_0[i + 3]);
+                }
             }
         }
     }
@@ -213,26 +428,36 @@ fn sample_area_lights(x: vec3f, seed: i32) -> vec3f {
     return direction;
 }
 
-fn radiance(_ray: Ray, seed: i32) -> vec3f {
+fn radiance(_ray: Ray, _seed: i32) -> vec3f {
     var L = vec3(0.0);
     var beta = 1.0;
     var depth = 0;
     var ray = _ray;
 
-    while(beta > 0.1 && depth <= 4){
+    var acc_color = vec3(1.0);
+
+    var seed = hash1u(u32(_seed));
+    seed = hash1u(seed);
+
+    while(beta > 0.1 && depth <= 2){
+        seed = hash1u(seed);
+
         var closest_intersection = intersect(ray);
         if(!closest_intersection.intersected){
             break;
         }
-
+        
         let cur_material = get_material(closest_intersection.material_id);
         let cur_normal = closest_intersection.normal;
         let cur_pt = closest_intersection.point;
 
         // calculate emissive contribution
         if(dot(cur_material.Ke, vec3f(1.0)) > 0){ 
-            L += beta * cur_material.Ke;
+            L += cur_material.Ke * acc_color;
+            break;
         }
+    
+        acc_color *= cur_material.Kd;
 
         // TODO: sample lights for direct illumination
         // let light_direction = normalize(vec3(1, 1, 1));
@@ -240,25 +465,22 @@ fn radiance(_ray: Ray, seed: i32) -> vec3f {
         // if(!to_light_test.intersected){
         //     L += beta * cur_material.Kd * vec3(1.0, 0.95, 0.9);
         // }
-        let offset_pt = cur_pt + cur_normal * 1.0e-2;
-        let light_direction = sample_area_lights(offset_pt.xyz, seed);
-        let to_light_test = intersect(ray_with_epsilon(offset_pt, vec4(light_direction, 0.0)));
-        if(to_light_test.intersected){
-            let new_material = get_material(to_light_test.material_id);
-            if(dot(new_material.Ke, vec3f(1.0)) > 0){ 
-                L += beta * cur_material.Kd * dot(cur_normal.xyz, light_direction) * 0.5;
-            }
-        }
+        // let offset_pt = cur_pt + cur_normal * 1.0e-2;
+        // let light_direction = sample_area_lights(offset_pt.xyz, seed);
+        // let to_light_test = intersect(ray_with_epsilon(offset_pt, vec4(light_direction, 0.0)));
+        // if(to_light_test.intersected){
+        //     let new_material = get_material(to_light_test.material_id);
+        //     if(dot(new_material.Ke, vec3f(1.0)) > 0){ 
+        //         L += beta * cur_material.Kd * dot(cur_normal.xyz, light_direction) * 0.5;
+        //     }
+        // }
 
         // sample outgoing direction to continue path
-        let sample = sample_hemisphere(cur_pt, cur_normal, seed);
+        let sample = sample_hemisphere(cur_pt, cur_normal, i32(seed));
         let new_ray = sample.r;
         let new_pdf = sample.pdf;
 
-        beta *= dot(new_ray.d, cur_normal);
-        if(dot(new_ray.d, cur_normal) < 0.0){
-            // return vec3(0.0);
-        }
+        beta *= (1 / PI) * dot(new_ray.d, cur_normal) / new_pdf;
         ray = new_ray;
         depth += 1;
     }

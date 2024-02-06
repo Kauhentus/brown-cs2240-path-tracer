@@ -1,5 +1,6 @@
-import { Vertex } from "@toysinbox3dprinting/js-geometry"
+import { Bounds, Vertex } from "@toysinbox3dprinting/js-geometry"
 
+// parsing types
 export type CameraData = {
     focus: Vertex,
     heightangle: number,
@@ -19,6 +20,7 @@ export type PrimitiveData = {
     path: string
 }
 
+// intermediate types
 export type SceneObjectGroup = {
     vertices: number[],
     objects: SceneObject[]
@@ -38,4 +40,10 @@ export type SceneObjectMaterial = {
     Kd: number[],
     Ks: number[],
     Ke: number[]
+}
+
+export type SceneObjectPacked = {
+    triangle_data: Float32Array;
+    bvh_data: Float32Array;
+    bounds: Bounds;
 }

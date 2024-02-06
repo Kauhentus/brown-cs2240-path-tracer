@@ -2,11 +2,11 @@ import { load_file } from "./ts-util/load-file";
 import { programEntry } from "./program-raymarch";
 import { ini_file_to_ini_scene, parse_ini_file } from "./ts-util/parse-ini";
 import * as convert from "xml-js";
-import { CameraData, SceneObjectNode } from "./ts-util/data-structs";
+import { CameraData, SceneObjectNode, SceneObjectPacked } from "./ts-util/data-structs";
 import { Triangle, Vertex, mat4_clone, mat4_matmul, mat4_rot_y, mat4_scale, mat4_translate } from "@toysinbox3dprinting/js-geometry";
 import { bounds_of_vec3, chunk_into_3, mat4_rot_axis } from "./ts-util/math";
 import { parse_obj } from "./ts-util/parse-obj";
-import { pack_scene_object_group } from "./packer";
+import { pack_bvh, pack_scene_object_group } from "./packer";
 import { BVH, BVHObject } from "./ts-util/bvh";
 
 // import { init_three } from "@toysinbox3dprinting/js-geometry";
@@ -102,7 +102,7 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
     const object_nodes: SceneObjectNode[] = raw_object_nodes.map(o => traverse_object_node(o, mat4_scale(1, 1, 1)));
 
     // pack extracted primitives into buffers for the GPU
-    const gpu_packed_primitives = await Promise.all(final_primitives.slice(0, 1).map(async (p) => {
+    const gpu_packed_primitives: SceneObjectPacked[] = await Promise.all(final_primitives.slice(0, 1).map(async (p) => {
         if(!p.data) throw Error('mesh primitive missing its data');
         let path = p.data.path;
 
@@ -114,12 +114,16 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
             mtl_data = "";
         }
 
+        // create packed triangle data 
         const intermediate = parse_obj(obj_data, mtl_data, p.ctm);
-        const vertices = intermediate.vertices;
+        const packed_array = pack_scene_object_group(intermediate);
+
+        // create packed bvh data
+        const vertices = intermediate.vertices
         const bvh_bounds = bounds_of_vec3(chunk_into_3(vertices));
-        const bvh_objects = intermediate.objects.map(o => {
+        const bvh_objects = intermediate.objects.map((o, mat_i) => {
             const indices = o.indices;
-            const objects: BVHObject[] = [];
+            const objects: BVHObject<number[]>[] = [];
 
             for(let i = 0; i < indices.length; i += 3){
                 let i0 = (indices[i] - 1) * 3;
@@ -129,32 +133,30 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
                 let v0 = [vertices[i0], vertices[i0 + 1], vertices[i0 + 2]];
                 let v1 = [vertices[i1], vertices[i1 + 1], vertices[i1 + 2]];
                 let v2 = [vertices[i2], vertices[i2 + 1], vertices[i2 + 2]];
-
+                
                 let tri = [v0, v1, v2];
                 let tri_bounds = bounds_of_vec3(tri);
                 objects.push({
-                    obj: [indices[i], indices[i + 1], indices[i + 2]],
+                    obj: [indices[i], indices[i + 1], indices[i + 2], mat_i],
                     bounds: tri_bounds
                 });
             }
 
             return objects;
         }).flat();
-
         const bvh = new BVH(bvh_objects, bvh_bounds);
-        bvh.construct();
-        console.log(bvh);
-
-        console.log(bvh_objects);
-
-        const packed_array = pack_scene_object_group(intermediate);
+        const packed_bvh = pack_bvh(bvh);
+        console.log(bvh)
+        console.log(packed_bvh)
         
-        return packed_array;
+        return {
+            triangle_data: packed_array,
+            bvh_data: packed_bvh,
+            bounds: bvh_bounds
+        };
     }));
 
     // initialize gpu pipeline
-    // const x_res = 512 * 1.5;
-    // const aspect_ratio = 1.5;
     const x_res = scene_description.Settings.imageWidth;
     const aspect_ratio = x_res / scene_description.Settings.imageHeight;
     const round_4 = (n : number) => Math.floor(n / 4) * 4;

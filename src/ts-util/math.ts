@@ -16,14 +16,14 @@ export const bounds_of_vec3 = (vertices: number[][]): Bounds => {
     let max = vertices[0].slice(0);
 
     for(let v of vertices){
-        if(v[0] < min[0]) min[0] = v[0];
-        if(v[0] > max[0]) max[0] = v[0];
+        if(v[0] <= min[0]) min[0] = v[0];
+        if(v[0] >= max[0]) max[0] = v[0];
 
-        if(v[1] < min[1]) min[1] = v[1];
-        if(v[1] > max[1]) max[1] = v[1];
+        if(v[1] <= min[1]) min[1] = v[1];
+        if(v[1] >= max[1]) max[1] = v[1];
 
-        if(v[2] < min[2]) min[2] = v[2];
-        if(v[2] > max[2]) max[2] = v[2];
+        if(v[2] <= min[2]) min[2] = v[2];
+        if(v[2] >= max[2]) max[2] = v[2];
     }
 
 

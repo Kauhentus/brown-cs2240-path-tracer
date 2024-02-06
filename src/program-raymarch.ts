@@ -1,7 +1,7 @@
 import { mat4_translate, mat4_scale, world_to_camera, mat4_invert, mat4_rot_z, mat4_matmul, mat4_vecmul, mat4_rot_y, sub_v, vec3_dot } from "@toysinbox3dprinting/js-geometry";
 import { loadShaders, preprocessShaders } from "./ts-util/shader-utils";
 import { Vertex } from "@toysinbox3dprinting/js-geometry";
-import { CameraData } from "./ts-util/data-structs";
+import { CameraData, SceneObjectPacked } from "./ts-util/data-structs";
 
 class Material {
     color: number[];
@@ -49,13 +49,14 @@ const materials = {
 export const programEntry = (
     screenDimension: number[], 
     ctx: CanvasRenderingContext2D, 
-    primitive_data: Float32Array[],
+    primitive_data: SceneObjectPacked[],
     camera_data: CameraData
 ) => {  
     let screen_dimension_inv = [1 / screenDimension[0], 1 / screenDimension[1]];
     
     let camera_position = camera_data.pos;
-    let camera_look = new Vertex(0, 0, -1);
+    let camera_look = camera_data.focus.sub_v(camera_position).normalize();
+    console.log(camera_look)
     console.log('cam data', camera_data)
 
     let FOV = camera_data.heightangle;
@@ -101,17 +102,29 @@ export const programEntry = (
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         });
 
-        const packed_primitive_buffers = primitive_data.map(data => {
+        const packed_primitive_triangle_buffers = primitive_data.map(data => {
             const packed_buffer = device.createBuffer({
                 mappedAtCreation: true,
-                size: data.byteLength,
+                size: data.triangle_data.byteLength,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             });
             const packed_buffer_arrayref = packed_buffer.getMappedRange();
-            new Float32Array(packed_buffer_arrayref).set(data);
+            new Float32Array(packed_buffer_arrayref).set(data.triangle_data);
             packed_buffer.unmap();
             return packed_buffer;
-        })
+        });
+
+        const packed_primitive_bvh_buffers = primitive_data.map(data => {
+            const packed_buffer = device.createBuffer({
+                mappedAtCreation: true,
+                size: data.bvh_data.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            });
+            const packed_buffer_arrayref = packed_buffer.getMappedRange();
+            new Float32Array(packed_buffer_arrayref).set(data.bvh_data);
+            packed_buffer.unmap();
+            return packed_buffer;
+        });
 
         const sample_collector = new Int32Array(screenDimension[0] * screenDimension[1] * 4);
         const display_buffer = new Uint8ClampedArray(screenDimension[0] * screenDimension[1] * 4);
@@ -133,8 +146,16 @@ export const programEntry = (
                         type: "storage"
                     }
                 },
-                ...packed_primitive_buffers.map((_, i) => ({
+
+                ...packed_primitive_triangle_buffers.map((_, i) => ({
                     binding: i + 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                } as GPUBindGroupLayoutEntry)),
+                ...packed_primitive_bvh_buffers.map((_, i) => ({
+                    binding: i + 10,
                     visibility: GPUShaderStage.COMPUTE,
                     buffer: {
                         type: "read-only-storage"
@@ -158,8 +179,15 @@ export const programEntry = (
                         buffer: resultMatrixBuffer
                     }
                 },
-                ...packed_primitive_buffers.map((buffer, i) => ({
+
+                ...packed_primitive_triangle_buffers.map((buffer, i) => ({
                     binding: i + 3,
+                    resource: {
+                        buffer: buffer
+                    }
+                } as GPUBindGroupEntry)),
+                ...packed_primitive_bvh_buffers.map((buffer, i) => ({
+                    binding: i + 10,
                     resource: {
                         buffer: buffer
                     }
@@ -248,7 +276,7 @@ export const programEntry = (
                 for(let i = 0; i < outputData.length; i++){
                     sample_collector[i] += outputData[i];
                     // display_buffer[i] = sample_collector[i] / (sample_runs / 2);
-                    display_buffer[i] = sample_collector[i] / (sample_runs / 4);
+                    display_buffer[i] = sample_collector[i] / (sample_runs / 8);
                 }
                 imageData.data.set(display_buffer);
                 ctx.putImageData(imageData, 0, 0);
@@ -258,7 +286,7 @@ export const programEntry = (
             })
 
             setTimeout(() => {
-                // requestAnimationFrame(render_loop);
+                requestAnimationFrame(render_loop);
             }, 250);
         };
         render_loop();
@@ -272,7 +300,8 @@ export const programEntry = (
         '/src/primitive.wgsl',
         '/src/wgsl-util/hash.wgsl',
         '/src/wgsl-util/samplers.wgsl',
-        '/src/wgsl-util/triangle-intersection.wgsl',
+        '/src/wgsl-util/ray-triangle-intersection.wgsl',
+        '/src/wgsl-util/ray-bbox-intersection.wgsl',
     ];
 
     loadShaders(shaderPaths).then(shaders => {

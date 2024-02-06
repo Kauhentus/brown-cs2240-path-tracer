@@ -59,14 +59,14 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     let view_plane_y = view_half_h * norm_y;
 
     var total_color = vec3(0.0, 0.0, 0.0);
-    let num_samples = 32;
+    let num_samples = 4;
     for(var i = 0; i < num_samples; i++){
         let p_pixel = vec4(view_plane_x, view_plane_y, -focal_length, 1.0f);
         let p_pixelv = cam_to_world * p_pixel;
         let direction = normalize(p_pixelv - camera_pos);
         var ray_world = Ray(camera_pos, direction);
 
-        var color = radiance(ray_world, i + i32(index * 100));
+        var color = radiance(ray_world, i + i32(index * 67));
         total_color += color;
     }
     total_color *= 1.0 / f32(num_samples);
@@ -75,9 +75,9 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     let reinhard_operator = luminance / (1.0 + luminance);
     let tonemapped_color = total_color * reinhard_operator;
 
-    var r: u32 = clamp(u32(total_color.x * 255), 0u, 255u);
-    var g: u32 = clamp(u32(total_color.y * 255), 0u, 255u);
-    var b: u32 = clamp(u32(total_color.z * 255), 0u, 255u);
+    var r: u32 = clamp(u32(tonemapped_color.x * 255), 0u, 255u);
+    var g: u32 = clamp(u32(tonemapped_color.y * 255), 0u, 255u);
+    var b: u32 = clamp(u32(tonemapped_color.z * 255), 0u, 255u);
     let final_color = (255 << 24) + (b << 16) + (g << 8) + r;
 
     resultMatrix.numbers[index] = final_color;
@@ -430,16 +430,17 @@ fn sample_area_lights(x: vec3f, seed: i32) -> vec3f {
 
 fn radiance(_ray: Ray, _seed: i32) -> vec3f {
     var L = vec3(0.0);
+    var acc_color = vec3(1.0);
     var beta = 1.0;
+    let rr_prob = 0.9;
+
     var depth = 0;
     var ray = _ray;
-
-    var acc_color = vec3(1.0);
 
     var seed = hash1u(u32(_seed));
     seed = hash1u(seed);
 
-    while(beta > 0.1 && depth <= 2){
+    while(beta > 0.1 && depth <= 16){
         seed = hash1u(seed);
 
         var closest_intersection = intersect(ray);
@@ -453,7 +454,7 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
 
         // calculate emissive contribution
         if(dot(cur_material.Ke, vec3f(1.0)) > 0){ 
-            L += cur_material.Ke * acc_color;
+            L += beta * cur_material.Ke * acc_color;
             break;
         }
     
@@ -475,12 +476,17 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         //     }
         // }
 
+        let rr_continue = hash1(seed);
+        if(rr_continue > rr_prob){ // don't continue
+            break;
+        }
+
         // sample outgoing direction to continue path
         let sample = sample_hemisphere(cur_pt, cur_normal, i32(seed));
         let new_ray = sample.r;
         let new_pdf = sample.pdf;
 
-        beta *= (1 / PI) * dot(new_ray.d, cur_normal) / new_pdf;
+        beta *= (1 / PI) * dot(new_ray.d, cur_normal) / (new_pdf * rr_prob);
         ray = new_ray;
         depth += 1;
     }

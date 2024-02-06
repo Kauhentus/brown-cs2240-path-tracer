@@ -285,9 +285,9 @@ export const programEntry = (
                 gpuReadBuffer.destroy();
             })
 
-            setTimeout(() => {
+            // setTimeout(() => {
                 requestAnimationFrame(render_loop);
-            }, 250);
+            // }, 250);
         };
         render_loop();
 

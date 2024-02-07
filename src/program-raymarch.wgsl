@@ -59,7 +59,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     let view_plane_y = view_half_h * norm_y;
 
     var total_color = vec3(0.0, 0.0, 0.0);
-    let num_samples = 4;
+    let num_samples = 8;
     for(var i = 0; i < num_samples; i++){
         let p_pixel = vec4(view_plane_x, view_plane_y, -focal_length, 1.0f);
         let p_pixelv = cam_to_world * p_pixel;
@@ -192,8 +192,8 @@ fn intersect(cur_ray: Ray) -> Intersection {
 
         var left_intersect = ray_bbox_intersection(cur_ray, left_min, left_max);
         var right_intersect = ray_bbox_intersection(cur_ray, right_min, right_max);
-        // left_intersect = true;
-        // right_intersect = true;
+        left_intersect = true;
+        right_intersect = true;
 
         var left_overlaps = false;
         var left_is_leaf = false;
@@ -295,6 +295,7 @@ fn intersect(cur_ray: Ray) -> Intersection {
 
     // if(stack_pointer == -1) { return null_intersection(); }
     // if(cur_depth > 2) { return null_intersection(); }
+    if(cur_depth == 255) { return null_intersection(); }
     // if(num_leaves == 4) { return null_intersection(); }
 
     let num_vertices = primitive_0[0];
@@ -479,7 +480,7 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         let new_ray = sample.r;
         let new_pdf = sample.pdf;
 
-        beta *= (1 / PI) * dot(new_ray.d, cur_normal) / (new_pdf * rr_prob);
+        beta *= (1.0 / PI) * dot(new_ray.d, cur_normal) / (new_pdf * rr_prob);
         ray = new_ray;
         depth += 1;
     }

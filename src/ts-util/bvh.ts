@@ -23,7 +23,7 @@ export class BVH<T> {
 
     construct(){
         console.log(`Constructing BVH with ${this.objects.length} objects`)
-        const MAX_DEPTH = 3;
+        const MAX_DEPTH = 4;
         const MAX_OBJ_PER_NODE = 8;
 
         let num_nodes = 0;

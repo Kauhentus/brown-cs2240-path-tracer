@@ -41,3 +41,9 @@ export const chunk_into_3 = <T>(array: T[]): T[][] => {
     }
     return result;
 }
+
+export const bounds_bounds_intersection_3d = (b1: Bounds, b2: Bounds) => {
+    return (b2.min.x <= b1.max.x && b1.min.x <= b2.max.x) &&
+           (b2.min.y <= b1.max.y && b1.min.y <= b2.max.y) &&
+           (b2.min.z <= b1.max.z && b1.min.z <= b2.max.z);
+}

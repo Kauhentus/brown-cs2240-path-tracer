@@ -265,6 +265,7 @@ export const programEntry = (
             const gpuCommands = commandEncoder.finish();
             device.queue.submit([gpuCommands]);
         
+            const time = new Date().getTime();
             // read data and put onto screen
             gpuReadBuffer.mapAsync(GPUMapMode.READ).then(() => {
                 const arrayBuffer = gpuReadBuffer.getMappedRange();
@@ -299,11 +300,13 @@ export const programEntry = (
 
                 gpuReadBuffer.unmap();
                 gpuReadBuffer.destroy();
+
+                console.log(`Path traced in ${new Date().getTime() - time} ms`)
             })
 
-            setTimeout(() => {
-                requestAnimationFrame(render_loop);
-            }, 250);
+            // setTimeout(() => {
+            //     requestAnimationFrame(render_loop);
+            // }, 2000);
         };
         render_loop();
 

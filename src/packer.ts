@@ -95,7 +95,7 @@ export const pack_bvh = (bvh: BVH<number[]>) => {
         let num_children = children.length;
 
         let cur_offset = result.length;
-        let left_node_offset = cur_offset + 5 + children.length;
+        let left_node_offset = cur_offset + 5 + 12 + children.length;
         let right_node_offset_index = cur_offset + 3;
 
         if(is_leaf) num_objects += children.length / 4;
@@ -108,6 +108,10 @@ export const pack_bvh = (bvh: BVH<number[]>) => {
             -1, // right node index
 
             is_leaf ? num_children : -2,
+            ...node.left_child ? node.left_child.bounds.min.toArray() : [0, 0, 0],
+            ...node.left_child ? node.left_child.bounds.max.toArray() : [0, 0, 0],
+            ...node.right_child ? node.right_child.bounds.min.toArray() : [0, 0, 0],
+            ...node.right_child ? node.right_child.bounds.max.toArray() : [0, 0, 0],
             ...children
         );
 

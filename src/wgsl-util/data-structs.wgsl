@@ -1,6 +1,7 @@
 struct Ray {
     p: vec4f,
-    d: vec4f
+    d: vec4f,
+    d_inv: vec4f
 }
 
 struct Ray3 {
@@ -55,11 +56,11 @@ fn eval_ray(ray: Ray, t: f32) -> vec4f {
 }
 
 fn ray_with_epsilon(p: vec4f, d: vec4f) -> Ray {
-    return Ray(p + 0.001 * d, d);
+    return Ray(p + 0.001 * d, d, 1.0 / d);
 }
 
 fn transform_ray(ray: Ray, transform: mat4x4<f32>) -> Ray {
     let new_p = transform * ray.p;
     let new_d = normalize(transform * ray.d);
-    return Ray(new_p, new_d);
+    return Ray(new_p, new_d, 1.0 / new_d);
 }

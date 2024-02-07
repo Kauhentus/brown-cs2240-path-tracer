@@ -1,4 +1,5 @@
-import { Bounds, Vertex, avg_nums, avg_v, bounds_bounds_intersection } from "@toysinbox3dprinting/js-geometry";
+import { Bounds, Vertex } from "@toysinbox3dprinting/js-geometry";
+import { bounds_bounds_intersection_3d } from "./math";
 
 export type BVHObject<T> = {obj: T, bounds: Bounds}
 export type BVHNode<T> = {
@@ -42,7 +43,7 @@ export class BVH<T> {
             let left_bounds_1: Bounds, right_bounds_1: Bounds;
             let left_bounds_2: Bounds, right_bounds_2: Bounds;
             
-            let mid_x = avg_nums(node.bounds.min.x, node.bounds.max.x);
+            let mid_x = (node.bounds.min.x + node.bounds.max.x) * 0.5;
             left_bounds_0 = new Bounds(
                 node.bounds.min, 
                 new Vertex(mid_x, node.bounds.max.y, node.bounds.max.z)
@@ -52,7 +53,7 @@ export class BVH<T> {
                 node.bounds.max
             );
 
-            let mid_y = avg_nums(node.bounds.min.y, node.bounds.max.y);
+            let mid_y = (node.bounds.min.y + node.bounds.max.y) * 0.5;
             left_bounds_1 = new Bounds(
                 node.bounds.min, 
                 new Vertex(node.bounds.max.x, mid_y, node.bounds.max.z)
@@ -62,7 +63,7 @@ export class BVH<T> {
                 node.bounds.max
             );
 
-            let mid_z = avg_nums(node.bounds.min.z, node.bounds.max.z);
+            let mid_z = (node.bounds.min.z + node.bounds.max.z) * 0.5;
             left_bounds_2 = new Bounds(
                 node.bounds.min, 
                 new Vertex(node.bounds.max.x, node.bounds.max.y, mid_z)
@@ -72,12 +73,12 @@ export class BVH<T> {
                 node.bounds.max
             );
 
-            let left_bound_objects_0 = node.objects.filter(o => bounds_bounds_intersection(o.bounds, left_bounds_0));
-            let right_bound_objects_0 = node.objects.filter(o => bounds_bounds_intersection(o.bounds, right_bounds_0));
-            let left_bound_objects_1 = node.objects.filter(o => bounds_bounds_intersection(o.bounds, left_bounds_1));
-            let right_bound_objects_1 = node.objects.filter(o => bounds_bounds_intersection(o.bounds, right_bounds_1));
-            let left_bound_objects_2 = node.objects.filter(o => bounds_bounds_intersection(o.bounds, left_bounds_2));
-            let right_bound_objects_2 = node.objects.filter(o => bounds_bounds_intersection(o.bounds, right_bounds_2));
+            let left_bound_objects_0 = node.objects.filter(o => bounds_bounds_intersection_3d(o.bounds, left_bounds_0));
+            let right_bound_objects_0 = node.objects.filter(o => bounds_bounds_intersection_3d(o.bounds, right_bounds_0));
+            let left_bound_objects_1 = node.objects.filter(o => bounds_bounds_intersection_3d(o.bounds, left_bounds_1));
+            let right_bound_objects_1 = node.objects.filter(o => bounds_bounds_intersection_3d(o.bounds, right_bounds_1));
+            let left_bound_objects_2 = node.objects.filter(o => bounds_bounds_intersection_3d(o.bounds, left_bounds_2));
+            let right_bound_objects_2 = node.objects.filter(o => bounds_bounds_intersection_3d(o.bounds, right_bounds_2));
 
             let target_num = node.objects.length / 2;
             let split_0 = Math.abs(left_bound_objects_0.length - target_num) + Math.abs(right_bound_objects_0.length - target_num);
@@ -85,15 +86,31 @@ export class BVH<T> {
             let split_2 = Math.abs(left_bound_objects_2.length - target_num) + Math.abs(right_bound_objects_2.length - target_num);
             let min_split = Math.min(split_0, split_1, split_2);
 
-            let new_axis = min_split === split_0 ? 0 : min_split === split_1 ? 1 : 2;
-            let left_bounds = min_split === split_0 ? left_bounds_0 : min_split === split_1 ? left_bounds_1 : left_bounds_2;
-            let right_bounds = min_split === split_0 ? right_bounds_0 : min_split === split_1 ? right_bounds_1 : right_bounds_2;
-            let left_bound_objects = min_split === split_0 ? left_bound_objects_0 : min_split === split_1 ? left_bound_objects_1 : left_bound_objects_2;
-            let right_bound_objects = min_split === split_0 ? right_bound_objects_0 : min_split === split_1 ? right_bound_objects_1 : right_bound_objects_2;
+            let new_axis = min_split === split_0 ? 
+                0 : min_split === split_1 ? 
+                1 : 
+                2;
+            let left_bounds = min_split === split_0 ? 
+                left_bounds_0 : min_split === split_1 ? 
+                left_bounds_1 : 
+                left_bounds_2;
+            let right_bounds = min_split === split_0 ? 
+                right_bounds_0 : min_split === split_1 ? 
+                right_bounds_1 : 
+                right_bounds_2;
+            let left_bound_objects = min_split === split_0 ? 
+                left_bound_objects_0 : min_split === split_1 ? 
+                left_bound_objects_1 : 
+                left_bound_objects_2;
+            let right_bound_objects = min_split === split_0 ? 
+                right_bound_objects_0 : min_split === split_1 ? 
+                right_bound_objects_1 : 
+                right_bound_objects_2;
+            node.axis = new_axis;
 
             node.left_child = {
                 is_leaf: false,
-                axis: new_axis,
+                axis: -1,
                 bounds: left_bounds,
                 objects: left_bound_objects
             }
@@ -109,7 +126,7 @@ export class BVH<T> {
 
             node.right_child = {
                 is_leaf: false,
-                axis: new_axis,
+                axis: -1,
                 bounds: right_bounds,
                 objects: right_bound_objects
             }

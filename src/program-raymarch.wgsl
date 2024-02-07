@@ -64,7 +64,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
         let p_pixel = vec4(view_plane_x, view_plane_y, -focal_length, 1.0f);
         let p_pixelv = cam_to_world * p_pixel;
         let direction = normalize(p_pixelv - camera_pos);
-        var ray_world = Ray(camera_pos, direction);
+        var ray_world = Ray(camera_pos, direction, 1.0 / direction);
 
         var color = radiance(ray_world, i + i32(index * 67));
         total_color += color;
@@ -106,44 +106,6 @@ fn intersect(cur_ray: Ray) -> Intersection {
         0, 0, 0, 0, 0, 0, 0, 0,
     );
     var stack_pointer = 0;
-    var bounds_stack = array( 
-        cur_min.x, cur_min.y, cur_min.z, cur_max.x, cur_max.y, cur_max.z,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-    );
-    var bounds_stack_pointer = 0;
 
     var leaf_flags = array( 
         0, 0, 0, 0, 0, 0, 0, 0,
@@ -153,47 +115,16 @@ fn intersect(cur_ray: Ray) -> Intersection {
     );
     var num_leaves = 0;
 
-    while(stack_pointer > -1 && cur_depth < 256){
+    while(stack_pointer > -1 && cur_depth < 128){
         let pointer = stack[stack_pointer];
-        let cur_is_leaf = bvh_0[pointer] == 1;
-        let cur_axis = bvh_0[pointer + 1];
 
-        let left_min = vec3f(
-            bounds_stack[bounds_stack_pointer * 6],
-            bounds_stack[bounds_stack_pointer * 6 + 1],
-            bounds_stack[bounds_stack_pointer * 6 + 2],
-        );
-        let right_max = vec3f(
-            bounds_stack[bounds_stack_pointer * 6 + 3],
-            bounds_stack[bounds_stack_pointer * 6 + 4],
-            bounds_stack[bounds_stack_pointer * 6 + 5],
-        );
-        // let left_min = cur_min;
-        // let right_max = cur_max;
-        
-        let left_max = select(
-            vec3((left_min.x + right_max.x) * 0.5, right_max.y, right_max.z),
-            select(
-                vec3(right_max.x, (left_min.y + right_max.y) * 0.5, right_max.z),
-                vec3(right_max.x, right_max.y, (left_min.z + right_max.z) * 0.5),
-                cur_axis == 1.0
-            ),
-            cur_axis == 0.0
-        );
-        let right_min = select(
-            vec3((left_min.x + right_max.x) * 0.5, left_min.y, left_min.z),
-            select(
-                vec3(left_min.x, (left_min.y + right_max.y) * 0.5, left_min.z),
-                vec3(left_min.x, left_min.y, (left_min.z + right_max.z) * 0.5),
-                cur_axis == 1.0
-            ),
-            cur_axis == 0.0
-        );
+        let left_min = vec3f(bvh_0[pointer + 5], bvh_0[pointer + 6], bvh_0[pointer + 7]);
+        let left_max = vec3f(bvh_0[pointer + 8], bvh_0[pointer + 9], bvh_0[pointer + 10]);
+        let right_min = vec3f(bvh_0[pointer + 11], bvh_0[pointer + 12], bvh_0[pointer + 13]);
+        let right_max = vec3f(bvh_0[pointer + 14], bvh_0[pointer + 15], bvh_0[pointer + 16]);
 
-        var left_intersect = ray_bbox_intersection(cur_ray, left_min, left_max);
-        var right_intersect = ray_bbox_intersection(cur_ray, right_min, right_max);
-        left_intersect = true;
-        right_intersect = true;
+        let left_intersect = 0.0 < ray_bbox_intersection(cur_ray, left_min, left_max);
+        let right_intersect = 0.0 < ray_bbox_intersection(cur_ray, right_min, right_max);
 
         var left_overlaps = false;
         var left_is_leaf = false;
@@ -229,12 +160,10 @@ fn intersect(cur_ray: Ray) -> Intersection {
 
         if(!traverse_left && !traverse_right){
             stack_pointer -= 1;
-            bounds_stack_pointer -= 1;
             if(stack_pointer < 0){ break; }
                 
             while(stack[stack_pointer] == -1){
                 stack_pointer -= 1;
-                bounds_stack_pointer -= 1;
                 if(stack_pointer < 0){ break; }
             }
         } else {
@@ -243,27 +172,11 @@ fn intersect(cur_ray: Ray) -> Intersection {
             if(traverse_left && !traverse_right){
                 stack_pointer += 1;
                 stack[stack_pointer] = i32(bvh_0[pointer + 2]);
-
-                bounds_stack_pointer += 1;
-                bounds_stack[bounds_stack_pointer * 6] = left_min.x;
-                bounds_stack[bounds_stack_pointer * 6 + 1] = left_min.y;
-                bounds_stack[bounds_stack_pointer * 6 + 2] = left_min.z;
-                bounds_stack[bounds_stack_pointer * 6 + 3] = left_max.x;
-                bounds_stack[bounds_stack_pointer * 6 + 4] = left_max.y;
-                bounds_stack[bounds_stack_pointer * 6 + 5] = left_max.z;
             } 
             
             else if(!traverse_left && traverse_right){
                 stack_pointer += 1;
                 stack[stack_pointer] = i32(bvh_0[pointer + 3]);
-
-                bounds_stack_pointer += 1;
-                bounds_stack[bounds_stack_pointer * 6] = right_min.x;
-                bounds_stack[bounds_stack_pointer * 6 + 1] = right_min.y;
-                bounds_stack[bounds_stack_pointer * 6 + 2] = right_min.z;
-                bounds_stack[bounds_stack_pointer * 6 + 3] = right_max.x;
-                bounds_stack[bounds_stack_pointer * 6 + 4] = right_max.y;
-                bounds_stack[bounds_stack_pointer * 6 + 5] = right_max.z;
             } 
             
             else { // traverse both
@@ -271,22 +184,6 @@ fn intersect(cur_ray: Ray) -> Intersection {
                 stack[stack_pointer] = i32(bvh_0[pointer + 2]);
                 stack_pointer += 1;
                 stack[stack_pointer] = i32(bvh_0[pointer + 3]);
-
-                bounds_stack_pointer += 1;
-                bounds_stack[bounds_stack_pointer * 6] = left_min.x;
-                bounds_stack[bounds_stack_pointer * 6 + 1] = left_min.y;
-                bounds_stack[bounds_stack_pointer * 6 + 2] = left_min.z;
-                bounds_stack[bounds_stack_pointer * 6 + 3] = left_max.x;
-                bounds_stack[bounds_stack_pointer * 6 + 4] = left_max.y;
-                bounds_stack[bounds_stack_pointer * 6 + 5] = left_max.z;
-
-                bounds_stack_pointer += 1;
-                bounds_stack[bounds_stack_pointer * 6] = right_min.x;
-                bounds_stack[bounds_stack_pointer * 6 + 1] = right_min.y;
-                bounds_stack[bounds_stack_pointer * 6 + 2] = right_min.z;
-                bounds_stack[bounds_stack_pointer * 6 + 3] = right_max.x;
-                bounds_stack[bounds_stack_pointer * 6 + 4] = right_max.y;
-                bounds_stack[bounds_stack_pointer * 6 + 5] = right_max.z;
             }
         }
 
@@ -295,19 +192,21 @@ fn intersect(cur_ray: Ray) -> Intersection {
 
     // if(stack_pointer == -1) { return null_intersection(); }
     // if(cur_depth > 2) { return null_intersection(); }
-    if(cur_depth == 255) { return null_intersection(); }
-    // if(num_leaves == 4) { return null_intersection(); }
+    // if(cur_depth > 30) { return null_intersection(); }
+    // if(num_leaves == 8) { return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7); }
+    // return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7);
 
     let num_vertices = primitive_0[0];
     let num_objects = primitive_0[1];
 
     var closest_intersection = null_intersection();
     var closest_t = -1.0;
+    var total_num_tri = 0;
 
     for(var n = 0; n < num_leaves; n++){
         let pointer = leaf_flags[n];
         let num_triangles = bvh_0[pointer + 4];
-        let bvh_o_start = pointer + 5;
+        let bvh_o_start = pointer + 5 + 12;
         let bvh_o_end = bvh_o_start + i32(num_triangles);
 
         let o_start = i32(primitive_0[3]);
@@ -346,6 +245,8 @@ fn intersect(cur_ray: Ray) -> Intersection {
                     closest_intersection.material_id = i32(bvh_0[i + 3]);
                 }
             }
+
+            total_num_tri += 1;
         }
     }
 

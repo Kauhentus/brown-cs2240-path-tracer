@@ -1,5 +1,5 @@
-import { Bounds, Vertex } from "@toysinbox3dprinting/js-geometry";
-import { bounds_bounds_intersection_3d } from "./math";
+import { Bounds, Vertex, avg_nums } from "@toysinbox3dprinting/js-geometry";
+import { bounds_bounds_intersection_3d, bounds_surface_area } from "./math";
 
 export type BVHObject<T> = {obj: T, bounds: Bounds}
 export type BVHNode<T> = {
@@ -25,24 +25,89 @@ export class BVH<T> {
     construct(){
         console.log(`Constructing BVH with ${this.objects.length} objects`)
         const MAX_DEPTH = 4;
-        const MAX_OBJ_PER_NODE = 8;
+        const MAX_OBJ_PER_NODE = 16;
 
         let num_nodes = 0;
         let num_leaves = 0;
+        let num_children: number[] = [];
 
-        const recurse = (node: BVHNode<T>, axis: number, depth: number) => {
+        const recurse = (node: BVHNode<T>, _axis: number, depth: number) => {
             num_nodes += 1;
 
             if(depth >= MAX_DEPTH){
                 node.is_leaf = true;
                 num_leaves += 1;
+                num_children.push(node.objects.length);
                 return;
             }
 
             let left_bounds_0: Bounds, right_bounds_0: Bounds;
             let left_bounds_1: Bounds, right_bounds_1: Bounds;
             let left_bounds_2: Bounds, right_bounds_2: Bounds;
-            
+
+            // let axis: number;
+            // let nb = node.bounds;
+            // if(nb.stride_x >= nb.stride_y && nb.stride_x >= nb.stride_z){
+            //     axis = 0;
+            // } else if(nb.stride_y >= nb.stride_x && nb.stride_y >= nb.stride_z){
+            //     axis = 2;
+            // } else {
+            //     axis = 1;
+            // }
+
+            // let split = 0.5;
+            // let cost = Infinity;
+            // let parent_sa = bounds_surface_area(nb);
+
+            // for(let s = 0.0; s <+ 1.0; s+= 0.05){
+            //     let cur_split = s;
+            //     let split_coord_on_axis;
+            //     let w0 = cur_split, w1 = 1.0 - cur_split;
+
+            //     if(axis == 0) {
+            //         split_coord_on_axis = w0 * nb.max.x + w1 * nb.min.x;
+            //     } else if(axis == 1) {
+            //         split_coord_on_axis = w0 * nb.max.y + w1 * nb.min.y;
+            //     } else {
+            //         split_coord_on_axis = w0 * nb.max.z + w1 * nb.min.z;
+            //     }
+
+            //     let low_box = new Bounds(node.bounds.min, node.bounds.max);
+            //     let high_box = new Bounds(node.bounds.max, node.bounds.max);
+                
+            //     if(axis == 0){
+            //         low_box.max.x = split_coord_on_axis;
+            //         high_box.min.x = split_coord_on_axis;
+            //     } else if(axis == 1){
+            //         low_box.max.y = split_coord_on_axis;
+            //         high_box.min.y = split_coord_on_axis;
+            //     } else {
+            //         low_box.max.z = split_coord_on_axis;
+            //         high_box.min.z = split_coord_on_axis;
+            //     }
+
+            //     let num_low = 0;
+            //     let num_high = 0;
+
+            //     for(let o of node.objects){
+            //         if(bounds_bounds_intersection_3d(o.bounds, low_box)){
+            //             num_low += 1;
+            //         } 
+            //         if(bounds_bounds_intersection_3d(o.bounds, high_box)){
+            //             num_high += 1;
+            //         }
+            //     }
+
+            //     let weight_l = bounds_surface_area(low_box) / parent_sa;
+            //     let weight_r = bounds_surface_area(high_box) / parent_sa;
+            //     let cur_cost = weight_l * num_low + weight_r * num_high;
+
+            //     if(cur_cost < cost){
+            //         split = cur_split;
+            //         cost = cur_cost;
+            //     }
+            // }
+
             let mid_x = (node.bounds.min.x + node.bounds.max.x) * 0.5;
             left_bounds_0 = new Bounds(
                 node.bounds.min, 
@@ -119,7 +184,9 @@ export class BVH<T> {
                 left_bound_objects.length === node.objects.length
             ){
                 node.left_child.is_leaf = true;
+                num_nodes += 1;
                 num_leaves += 1;
+                num_children.push(node.objects.length);
             } else {
                 recurse(node.left_child, new_axis, depth + 1);
             }
@@ -135,7 +202,9 @@ export class BVH<T> {
                 right_bound_objects.length === node.objects.length
             ) {
                 node.right_child.is_leaf = true;
+                num_nodes += 1;
                 num_leaves += 1;
+                num_children.push(node.objects.length);
             } else {
                 recurse(node.right_child, new_axis, depth + 1);
             }
@@ -151,5 +220,6 @@ export class BVH<T> {
 
         console.log(`    Finished with ${num_nodes} nodes created`)
         console.log(`    Contains ${num_leaves} leaf nodes`)
+        console.log(`    Leaf nodes average ${avg_nums(...num_children)} primitives each`)
     }
 }

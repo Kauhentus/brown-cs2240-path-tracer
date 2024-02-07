@@ -59,7 +59,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     let view_plane_y = view_half_h * norm_y;
 
     var total_color = vec3(0.0, 0.0, 0.0);
-    let num_samples = 8;
+    let num_samples = 4;
     for(var i = 0; i < num_samples; i++){
         let p_pixel = vec4(view_plane_x, view_plane_y, -focal_length, 1.0f);
         let p_pixelv = cam_to_world * p_pixel;
@@ -95,27 +95,32 @@ fn get_material(material_id: i32) -> Material {
 
 fn intersect(cur_ray: Ray) -> Intersection {
     // first intersect BVH to find candidate triangles
-    var cur_min = vec3(bvh_0[0], bvh_0[1], bvh_0[2]);
-    var cur_max = vec3(bvh_0[3], bvh_0[4], bvh_0[5]);
-    var cur_depth = 0;
 
     var stack = array( 
         6, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
+
+        
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
     );
     var stack_pointer = 0;
+    var cur_depth = 0;
+    var num_tri_ints = 0;
 
-    var leaf_flags = array( 
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-    );
-    var num_leaves = 0;
+    let num_vertices = primitive_0[0];
+    let num_objects = primitive_0[1];
+    let o_start = i32(primitive_0[3]);
+    let v_start_offset = i32(primitive_0[2]);
 
-    while(stack_pointer > -1 && cur_depth < 128){
+    var closest_intersection = null_intersection();
+    var closest_t = -1.0;    
+
+    while(stack_pointer > -1){
         let pointer = stack[stack_pointer];
 
         let left_min = vec3f(bvh_0[pointer + 5], bvh_0[pointer + 6], bvh_0[pointer + 7]);
@@ -123,40 +128,117 @@ fn intersect(cur_ray: Ray) -> Intersection {
         let right_min = vec3f(bvh_0[pointer + 11], bvh_0[pointer + 12], bvh_0[pointer + 13]);
         let right_max = vec3f(bvh_0[pointer + 14], bvh_0[pointer + 15], bvh_0[pointer + 16]);
 
-        let left_intersect = 0.0 < ray_bbox_intersection(cur_ray, left_min, left_max);
-        let right_intersect = 0.0 < ray_bbox_intersection(cur_ray, right_min, right_max);
+        let left_intersect_dist = ray_bbox_intersection(cur_ray, left_min, left_max);
+        let right_intersect_dist = ray_bbox_intersection(cur_ray, right_min, right_max);
+        let left_intersect = 0.0 < left_intersect_dist;
+        let right_intersect = 0.0 < right_intersect_dist;
 
-        var left_overlaps = false;
         var left_is_leaf = false;
-        var right_overlaps = false;
         var right_is_leaf = false;
 
         if(left_intersect){
-            left_overlaps = true;
             let left_pointer = i32(bvh_0[pointer + 2]);
             let is_leaf = bvh_0[left_pointer] == 1;
 
             if(is_leaf){
                 left_is_leaf = true;
-                leaf_flags[num_leaves] = left_pointer;
-                num_leaves += 1;
+
+                let num_triangles = bvh_0[left_pointer + 4];
+                let bvh_o_start = left_pointer + 5 + 12;
+                let bvh_o_end = bvh_o_start + i32(num_triangles);
+
+                for(var i = bvh_o_start; i < bvh_o_end; i += 4){
+                    let i0 = (i32(bvh_0[i]) - 1) * 3;
+                    let i1 = (i32(bvh_0[i + 1]) - 1) * 3;
+                    let i2 = (i32(bvh_0[i + 2]) - 1) * 3;
+
+                    let v0 = vec3f(
+                        primitive_0[v_start_offset + i0], 
+                        primitive_0[v_start_offset + i0 + 1], 
+                        primitive_0[v_start_offset + i0 + 2], 
+                    );
+                    let v1 = vec3f(
+                        primitive_0[v_start_offset + i1], 
+                        primitive_0[v_start_offset + i1 + 1], 
+                        primitive_0[v_start_offset + i1 + 2], 
+                    );
+                    let v2 = vec3f(
+                        primitive_0[v_start_offset + i2], 
+                        primitive_0[v_start_offset + i2 + 1], 
+                        primitive_0[v_start_offset + i2 + 2], 
+                    );
+
+                    let intersection = ray_triangle_intersection(
+                        cur_ray, v0, v1, v2
+                    );
+                    num_tri_ints += 1;
+
+                    if(intersection.intersected){
+                        if(closest_t < 0 || intersection.t < closest_t){
+                            closest_intersection = intersection;
+                            closest_t = intersection.t;
+                            closest_intersection.material_id = i32(bvh_0[i + 3]);
+                        }
+                    }
+                }
             }
         }
 
         if(right_intersect){
-            right_overlaps = true;
             let right_pointer = i32(bvh_0[pointer + 3]);
             let is_leaf = bvh_0[right_pointer] == 1;
 
             if(is_leaf){
                 right_is_leaf = true;
-                leaf_flags[num_leaves] = right_pointer;
-                num_leaves += 1;
+
+                let num_triangles = bvh_0[right_pointer + 4];
+                let bvh_o_start = right_pointer + 5 + 12;
+                let bvh_o_end = bvh_o_start + i32(num_triangles);
+
+                let o_start = i32(primitive_0[3]);
+                let v_start_offset = i32(primitive_0[2]);
+
+                for(var i = bvh_o_start; i < bvh_o_end; i += 4){
+                    let i0 = (i32(bvh_0[i]) - 1) * 3;
+                    let i1 = (i32(bvh_0[i + 1]) - 1) * 3;
+                    let i2 = (i32(bvh_0[i + 2]) - 1) * 3;
+
+                    let v0 = vec3f(
+                        primitive_0[v_start_offset + i0], 
+                        primitive_0[v_start_offset + i0 + 1], 
+                        primitive_0[v_start_offset + i0 + 2], 
+                    );
+                    let v1 = vec3f(
+                        primitive_0[v_start_offset + i1], 
+                        primitive_0[v_start_offset + i1 + 1], 
+                        primitive_0[v_start_offset + i1 + 2], 
+                    );
+                    let v2 = vec3f(
+                        primitive_0[v_start_offset + i2], 
+                        primitive_0[v_start_offset + i2 + 1], 
+                        primitive_0[v_start_offset + i2 + 2], 
+                    );
+
+                    let intersection = ray_triangle_intersection(
+                        cur_ray, v0, v1, v2
+                    );
+                    num_tri_ints += 1;
+
+                    if(intersection.intersected){
+                        if(closest_t < 0 || intersection.t < closest_t){
+                            closest_intersection = intersection;
+                            closest_t = intersection.t;
+                            closest_intersection.material_id = i32(bvh_0[i + 3]);
+                        }
+                    }
+                }
             }
         }
 
-        let traverse_left = left_overlaps && !left_is_leaf;
-        let traverse_right = right_overlaps && !right_is_leaf;
+        let traverse_left = left_intersect && !left_is_leaf 
+            && !(closest_t > 0 && left_intersect_dist > closest_t);
+        let traverse_right = right_intersect && !right_is_leaf 
+            && !(closest_t > 0 && right_intersect_dist > closest_t);
 
         if(!traverse_left && !traverse_right){
             stack_pointer -= 1;
@@ -180,9 +262,8 @@ fn intersect(cur_ray: Ray) -> Intersection {
             } 
             
             else { // traverse both
-                stack_pointer += 1;
-                stack[stack_pointer] = i32(bvh_0[pointer + 2]);
-                stack_pointer += 1;
+                stack[stack_pointer + 1] = i32(bvh_0[pointer + 2]);
+                stack_pointer += 2;
                 stack[stack_pointer] = i32(bvh_0[pointer + 3]);
             }
         }
@@ -192,63 +273,9 @@ fn intersect(cur_ray: Ray) -> Intersection {
 
     // if(stack_pointer == -1) { return null_intersection(); }
     // if(cur_depth > 2) { return null_intersection(); }
-    // if(cur_depth > 30) { return null_intersection(); }
+    if(num_tri_ints > 1000) { return null_intersection(); }
     // if(num_leaves == 8) { return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7); }
     // return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7);
-
-    let num_vertices = primitive_0[0];
-    let num_objects = primitive_0[1];
-
-    var closest_intersection = null_intersection();
-    var closest_t = -1.0;
-    var total_num_tri = 0;
-
-    for(var n = 0; n < num_leaves; n++){
-        let pointer = leaf_flags[n];
-        let num_triangles = bvh_0[pointer + 4];
-        let bvh_o_start = pointer + 5 + 12;
-        let bvh_o_end = bvh_o_start + i32(num_triangles);
-
-        let o_start = i32(primitive_0[3]);
-        let v_start_offset = i32(primitive_0[2]);
-
-        for(var i = bvh_o_start; i < bvh_o_end; i += 4){
-            let i0 = (i32(bvh_0[i]) - 1) * 3;
-            let i1 = (i32(bvh_0[i + 1]) - 1) * 3;
-            let i2 = (i32(bvh_0[i + 2]) - 1) * 3;
-
-            let v0 = vec3f(
-                primitive_0[v_start_offset + i0], 
-                primitive_0[v_start_offset + i0 + 1], 
-                primitive_0[v_start_offset + i0 + 2], 
-            );
-            let v1 = vec3f(
-                primitive_0[v_start_offset + i1], 
-                primitive_0[v_start_offset + i1 + 1], 
-                primitive_0[v_start_offset + i1 + 2], 
-            );
-            let v2 = vec3f(
-                primitive_0[v_start_offset + i2], 
-                primitive_0[v_start_offset + i2 + 1], 
-                primitive_0[v_start_offset + i2 + 2], 
-            );
-
-            var intersection = ray_triangle_intersection(
-                cur_ray, v0, v1, v2
-            );
-
-            if(intersection.intersected){
-                if(closest_t < 0 || intersection.t < closest_t){
-                    closest_intersection = intersection;
-                    closest_t = intersection.t;
-
-                    closest_intersection.material_id = i32(bvh_0[i + 3]);
-                }
-            }
-
-            total_num_tri += 1;
-        }
-    }
 
     return closest_intersection;
 }

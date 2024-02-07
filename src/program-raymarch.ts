@@ -304,9 +304,9 @@ export const programEntry = (
                 console.log(`Path traced in ${new Date().getTime() - time} ms`)
             })
 
-            // setTimeout(() => {
-            //     requestAnimationFrame(render_loop);
-            // }, 2000);
+            setTimeout(() => {
+                requestAnimationFrame(render_loop);
+            }, 5000);
         };
         render_loop();
 

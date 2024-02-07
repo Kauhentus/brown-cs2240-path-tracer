@@ -47,3 +47,10 @@ export const bounds_bounds_intersection_3d = (b1: Bounds, b2: Bounds) => {
            (b2.min.y <= b1.max.y && b1.min.y <= b2.max.y) &&
            (b2.min.z <= b1.max.z && b1.min.z <= b2.max.z);
 }
+
+export const bounds_surface_area = (b: Bounds) => {
+    let sx = b.stride_x;
+    let sy = b.stride_y;
+    let sz = b.stride_z;
+    return 2 * (sx * sy + sy * sz + sx * sz);
+}

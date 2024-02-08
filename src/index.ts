@@ -12,8 +12,8 @@ import { BVH, BVHObject } from "./ts-util/bvh";
 // import { init_three } from "@toysinbox3dprinting/js-geometry";
 // init_three();
 
-// load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) => {
-load_file('/scene_files/milestone/sphere_milestone.ini').then(async (file) => {
+load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) => {
+// load_file('/scene_files/milestone/sphere_milestone.ini').then(async (file) => {
     // parse scene config .ini file
     const ini_file = parse_ini_file(file);
     const scene_description = ini_file_to_ini_scene(ini_file);
@@ -103,7 +103,7 @@ load_file('/scene_files/milestone/sphere_milestone.ini').then(async (file) => {
     const object_nodes: SceneObjectNode[] = raw_object_nodes.map(o => traverse_object_node(o, mat4_scale(1, 1, 1)));
 
     // pack extracted primitives into buffers for the GPU
-    const gpu_packed_primitives: SceneObjectPacked[] = await Promise.all(final_primitives.slice(0, 1).map(async (p) => {
+    const gpu_packed_primitives: SceneObjectPacked[] = await Promise.all(final_primitives.slice(1, 2).map(async (p) => {
         if(!p.data) throw Error('mesh primitive missing its data');
         let path = p.data.path;
 

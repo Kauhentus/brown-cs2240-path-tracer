@@ -302,11 +302,16 @@ export const programEntry = (
                 gpuReadBuffer.destroy();
 
                 console.log(`Path traced in ${new Date().getTime() - time} ms`)
+
+                setTimeout(() => {
+                    requestAnimationFrame(render_loop);
+                }, 500);
+                
             })
 
-            setTimeout(() => {
-                requestAnimationFrame(render_loop);
-            }, 5000);
+            // setTimeout(() => {
+            //     
+            // }, 1000);
         };
         render_loop();
 

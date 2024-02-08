@@ -59,7 +59,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     let view_plane_y = view_half_h * norm_y;
 
     var total_color = vec3(0.0, 0.0, 0.0);
-    let num_samples = 4;
+    let num_samples = 1;
     for(var i = 0; i < num_samples; i++){
         let p_pixel = vec4(view_plane_x, view_plane_y, -focal_length, 1.0f);
         let p_pixelv = cam_to_world * p_pixel;
@@ -273,7 +273,7 @@ fn intersect(cur_ray: Ray) -> Intersection {
 
     // if(stack_pointer == -1) { return null_intersection(); }
     // if(cur_depth > 2) { return null_intersection(); }
-    if(num_tri_ints > 1000) { return null_intersection(); }
+    // if(num_tri_ints > 1000) { return null_intersection(); }
     // if(num_leaves == 8) { return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7); }
     // return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7);
 

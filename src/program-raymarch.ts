@@ -47,18 +47,14 @@ const materials = {
 }
 
 export const programEntry = (
-    screenDimension: number[], 
-    ctx: CanvasRenderingContext2D, 
-    primitive_data: SceneObjectPacked[],
-    camera_data: CameraData
+    screenDimension: number[], ctx: CanvasRenderingContext2D, 
+    primitive_data: SceneObjectPacked[], camera_data: CameraData,
+    samples_per_pixel: number, path_cont_prob: number
 ) => {  
     let screen_dimension_inv = [1 / screenDimension[0], 1 / screenDimension[1]];
     
     let camera_position = camera_data.pos;
     let camera_look = camera_data.focus.sub_v(camera_position).normalize();
-    console.log(camera_look)
-    console.log('cam data', camera_data)
-
     let FOV = camera_data.heightangle;
     // TODO: convert to horizontal FOV
 
@@ -85,6 +81,7 @@ export const programEntry = (
 
             ...world_to_cam_mat,      
             ...cam_to_world_mat,
+            samples_per_pixel, path_cont_prob, 0, 0 // 44, 45, 46, 47
         ];
         const metaMatrix = new Float32Array(metaData);
         const gpuBufferMetaMatrix = device.createBuffer({
@@ -215,10 +212,10 @@ export const programEntry = (
         let rot_z = mat4_rot_y(1 * Math.PI / 180);
         let enable_camera_movement = false;
 
-        setInterval(() => {
-            const time_elapsed = (new Date().getTime() - start_time);
-            console.log(`FPS: ${frames / time_elapsed * 1000}`)
-        }, 1000);
+        // setInterval(() => {
+        //     const time_elapsed = (new Date().getTime() - start_time);
+        //     console.log(`FPS: ${frames / time_elapsed * 1000}`)
+        // }, 1000);
 
         const render_loop = async () => {
             const time_elapsed = (new Date().getTime() - start_time);
@@ -274,21 +271,34 @@ export const programEntry = (
                 sample_runs += 1;
                 let num_pixels = outputData.length / 3;
                 let reinhard = 0;
-                
+                let max_lum = 0;
+
                 for(let i = 0; i < num_pixels; i++){
                     let i3 = i * 3;
-                    let i4 = i * 4;
                     sample_collector[i3] += outputData[i3];
                     sample_collector[i3 + 1] += outputData[i3 + 1];
                     sample_collector[i3 + 2] += outputData[i3 + 2];
 
                     let raw_r = sample_collector[i3] / sample_runs;
+                    let raw_g = sample_collector[i3 + 1] / sample_runs;                    
+                    let raw_b = sample_collector[i3 + 2] / sample_runs;
+
+                    let lum_i = (raw_r + raw_g + raw_b) / 3.0;
+                    if(lum_i > max_lum) max_lum = lum_i;
+                }
+
+                for(let i = 0; i < num_pixels; i++){
+                    let i3 = i * 3;
+                    let i4 = i * 4;
+
+                    let raw_r = sample_collector[i3] / sample_runs;
                     let raw_g = sample_collector[i3 + 1] / sample_runs;
                     let raw_b = sample_collector[i3 + 2] / sample_runs;
 
-                    let lum_i = (raw_r + raw_g + raw_b) / 3.0 * 1000;
-                    let lum_o = lum_i * 4.0 / (1.0 + lum_i);
+                    let lum_i = (raw_r + raw_g + raw_b) / 3.0;
+                    let lum_o = (lum_i * (1.0 + lum_i / max_lum ** 2.0) / (1.0 + lum_i)) ** (0.01) * 4;
                     // let lum_o = 2;
+                    // let lum_o = 1;
 
                     display_buffer[i4] = (raw_r * lum_o * 255) | 0;
                     display_buffer[i4 + 1] = (raw_g * lum_o * 255) | 0;
@@ -303,10 +313,14 @@ export const programEntry = (
 
                 console.log(`Path traced in ${new Date().getTime() - time} ms`)
 
-                setTimeout(() => {
+                if(frames < samples_per_pixel){
                     requestAnimationFrame(render_loop);
-                }, 500);
-                
+                } else {
+                    console.log("Finished rendering!")
+                }
+                // setTimeout(() => {
+                //     requestAnimationFrame(render_loop);
+                // }, 500);
             })
 
             // setTimeout(() => {
@@ -332,6 +346,5 @@ export const programEntry = (
         return preprocessShaders(shaders, shaderPaths);
     }).then(async (shaders) => {
         await initGPUCompute(shaders); 
-        console.log("HI")
     });
 }

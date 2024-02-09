@@ -20,6 +20,8 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
     const scene_file_path = scene_description.IO.scene;
     const scene_xml = await load_file(scene_file_path);
     const scene_root = (convert.xml2js(scene_xml, {compact: true}) as any)['scenefile'];
+
+    console.log(scene_description);
     
     const raw_camera_data = scene_root['cameradata'];
     const camera_focus = raw_camera_data.focus._attributes;
@@ -103,7 +105,7 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
     const object_nodes: SceneObjectNode[] = raw_object_nodes.map(o => traverse_object_node(o, mat4_scale(1, 1, 1)));
 
     // pack extracted primitives into buffers for the GPU
-    const gpu_packed_primitives: SceneObjectPacked[] = await Promise.all(final_primitives.slice(1, 2).map(async (p) => {
+    const gpu_packed_primitives: SceneObjectPacked[] = await Promise.all(final_primitives.slice(0, 1).map(async (p) => {
         if(!p.data) throw Error('mesh primitive missing its data');
         let path = p.data.path;
 
@@ -118,6 +120,8 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
         // create packed triangle data 
         const intermediate = parse_obj(obj_data, mtl_data, p.ctm);
         const packed_array = pack_scene_object_group(intermediate);
+
+        console.log(intermediate)
 
         // create packed bvh data
         const vertices = intermediate.vertices
@@ -147,8 +151,8 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
         }).flat();
         const bvh = new BVH(bvh_objects, bvh_bounds);
         const packed_bvh = pack_bvh(bvh);
-        console.log(bvh)
-        console.log(packed_bvh)
+        // console.log(bvh)
+        // console.log(packed_bvh)
         
         return {
             triangle_data: packed_array,
@@ -162,12 +166,15 @@ load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) 
     const aspect_ratio = x_res / scene_description.Settings.imageHeight;
     const round_4 = (n : number) => Math.floor(n / 4) * 4;
     const screenDimension = [round_4(x_res), round_4(x_res / aspect_ratio)];
-    console.log('screendim', screenDimension)
     const mainCanvas = document.getElementById('main-canvas') as HTMLCanvasElement;
     mainCanvas.width = screenDimension[0];
     mainCanvas.height = screenDimension[1];
     const ctx = mainCanvas.getContext('2d') as CanvasRenderingContext2D;
-    programEntry(screenDimension, ctx, gpu_packed_primitives, camera_data);
+    programEntry(
+        screenDimension, ctx, 
+        gpu_packed_primitives, camera_data,
+        scene_description.Settings.samplesPerPixel, scene_description.Settings.pathContinuationProb
+    );
 });
 
 

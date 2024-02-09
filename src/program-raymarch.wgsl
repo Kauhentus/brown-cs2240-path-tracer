@@ -17,6 +17,7 @@ struct MetaData {
 
     world_to_cam: mat4x4<f32>,
     cam_to_world: mat4x4<f32>,
+    params: vec4f
 }
 
 struct OutputData {
@@ -354,7 +355,7 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
     var L = vec3(0.0);
     var acc_color = vec3(1.0);
     var beta = 1.0;
-    let rr_prob = 0.9;
+    let rr_prob = meta_data.params.y;
 
     var depth = 0;
     var ray = _ray;
@@ -374,13 +375,20 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         let cur_normal = closest_intersection.normal;
         let cur_pt = closest_intersection.point;
 
+        // return ((cur_normal + 1.0) * 0.5).xyz;
+
         // calculate emissive contribution
         if(dot(cur_material.Ke, vec3f(1.0)) > 0){ 
             L += beta * cur_material.Ke * acc_color;
             break;
         }
     
-        acc_color *= cur_material.Kd;
+        if(dot(cur_material.Kd, vec3f(1.0)) == 0.03){ // fix for spheres for now
+            acc_color *= vec3(1.0);
+        } else {
+            acc_color *= cur_material.Kd;
+        }
+        
 
         // TODO: sample lights for direct illumination
         // let light_direction = normalize(vec3(1, 1, 1));

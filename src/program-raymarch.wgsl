@@ -47,10 +47,14 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
 
     // guard against out-of-bounds work group sizes    
     if (global_id.x >= u32(size.x) || global_id.y >= u32(size.y)) { return; };
-
-    let gx = f32(global_id.x);
-    let gy = f32(global_id.y);
     let index = (global_id.x + global_id.y * u32(size.x)) * 1;
+
+    var temp_seed = index * 16787u;
+    temp_seed = hash1u(temp_seed);
+    temp_seed = hash1u(temp_seed);
+    let pixel_jitter = hash2(temp_seed) - 0.5;
+    let gx = f32(global_id.x) + pixel_jitter.x;
+    let gy = f32(global_id.y) + pixel_jitter.y;
 
     let norm_x = (gx + 0.5f) * size_inv.x - 0.5f;
     let norm_y = (size.y - 1.f - gy + 0.5f) * size_inv.y - 0.5f;
@@ -375,8 +379,6 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         let cur_normal = closest_intersection.normal;
         let cur_pt = closest_intersection.point;
 
-        // return ((cur_normal + 1.0) * 0.5).xyz;
-
         // calculate emissive contribution
         if(dot(cur_material.Ke, vec3f(1.0)) > 0){ 
             L += beta * cur_material.Ke * acc_color;
@@ -388,7 +390,6 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         } else {
             acc_color *= cur_material.Kd;
         }
-        
 
         // TODO: sample lights for direct illumination
         // let light_direction = normalize(vec3(1, 1, 1));
@@ -407,6 +408,7 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         // }
 
         let rr_continue = hash1(seed);
+        
         if(rr_continue > rr_prob){ // don't continue
             break;
         }

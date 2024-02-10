@@ -296,7 +296,7 @@ export const programEntry = (
                     let raw_b = sample_collector[i3 + 2] / sample_runs;
 
                     let lum_i = (raw_r + raw_g + raw_b) / 3.0;
-                    let lum_o = (lum_i * (1.0 + lum_i / max_lum ** 2.0) / (1.0 + lum_i)) ** (0.01) * 4;
+                    let lum_o = (lum_i * (1.0 + lum_i / max_lum ** 2.0) / (1.0 + lum_i)) ** (0.01) * 3;
                     // let lum_o = 2;
                     // let lum_o = 1;
 

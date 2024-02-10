@@ -40,8 +40,9 @@ fn sample_hemisphere(x: vec4f, n: vec4f, seed: i32) -> RaySample {
     let xi_1 = 1.0 - (sample.x);
     let xi_2 = 1.0 - (sample.y);
 
-    let phi = 2 * PI * xi_1;
-    let theta = PI * xi_2;
+    let theta = 2.0 * PI * xi_1;
+    // let theta = PI * xi_2;
+    let phi = acos(2.0 * xi_2 - 1.0);
     let nx = sin(phi) * cos(theta);
     let ny = sin(phi) * sin(theta);
     let nz = cos(phi);

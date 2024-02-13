@@ -13,7 +13,8 @@ import { BVH, BVHObject } from "./ts-util/bvh";
 // init_three();
 
 // load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) => {
-load_file('/scene_files/milestone/sphere_milestone.ini').then(async (file) => {
+// load_file('/scene_files/milestone/sphere_milestone.ini').then(async (file) => {
+load_file('/scene_files/final/glossy.ini').then(async (file) => {
     // parse scene config .ini file
     const ini_file = parse_ini_file(file);
     const scene_description = ini_file_to_ini_scene(ini_file);

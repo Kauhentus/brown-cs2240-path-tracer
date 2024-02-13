@@ -295,10 +295,10 @@ export const programEntry = (
                     let raw_g = sample_collector[i3 + 1] / sample_runs;
                     let raw_b = sample_collector[i3 + 2] / sample_runs;
 
-                    let lum_i = (raw_r + raw_g + raw_b) / 3.0;
-                    let lum_o = (lum_i * (1.0 + lum_i / max_lum ** 2.0) / (1.0 + lum_i)) ** (0.01) * 3;
+                    // let lum_i = (raw_r + raw_g + raw_b) / 3.0;
+                    // let lum_o = (lum_i * (1.0 + lum_i / max_lum ** 2.0) / (1.0 + lum_i));
                     // let lum_o = 2;
-                    // let lum_o = 1;
+                    let lum_o = 0.4;
 
                     display_buffer[i4] = (raw_r * lum_o * 255) | 0;
                     display_buffer[i4 + 1] = (raw_g * lum_o * 255) | 0;
@@ -313,14 +313,14 @@ export const programEntry = (
 
                 console.log(`Path traced in ${new Date().getTime() - time} ms`)
 
-                if(frames < samples_per_pixel){
+                // if(frames < samples_per_pixel){
+                    // requestAnimationFrame(render_loop);
+                // } else {
+                //     console.log("Finished rendering!")
+                // }
+                setTimeout(() => {
                     requestAnimationFrame(render_loop);
-                } else {
-                    console.log("Finished rendering!")
-                }
-                // setTimeout(() => {
-                //     requestAnimationFrame(render_loop);
-                // }, 500);
+                }, 50);
             })
 
             // setTimeout(() => {

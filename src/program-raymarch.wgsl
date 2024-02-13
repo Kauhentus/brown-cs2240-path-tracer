@@ -49,7 +49,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
     if (global_id.x >= u32(size.x) || global_id.y >= u32(size.y)) { return; };
     let index = (global_id.x + global_id.y * u32(size.x)) * 1;
 
-    var temp_seed = index * 16787u;
+    var temp_seed = index * 16787u + u32(t);
     temp_seed = hash1u(temp_seed);
     temp_seed = hash1u(temp_seed);
     let pixel_jitter = hash2(temp_seed) - 0.5;
@@ -71,7 +71,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
         let direction = normalize(p_pixelv - camera_pos);
         var ray_world = Ray(camera_pos, direction, 1.0 / direction);
 
-        var color = radiance(ray_world, i + i32(index * 67));
+        var color = radiance(ray_world, i + i32(index * 67) + i32(t));
         total_color += color;
     }
     total_color *= 1.0 / f32(num_samples);
@@ -285,7 +285,7 @@ fn intersect(cur_ray: Ray) -> Intersection {
     return closest_intersection;
 }
 
-fn sample_area_lights(x: vec3f, seed: i32) -> vec3f {
+fn sample_area_lights(x: vec3f, seed: i32) -> vec4f {
     let e1_start = i32(primitive_0[8]);
     let e1_end = i32(primitive_0[9]);
     let e2_start = i32(primitive_0[10]);
@@ -352,7 +352,7 @@ fn sample_area_lights(x: vec3f, seed: i32) -> vec3f {
     let rand_pt_on_tri = sample_triangle_3D(v0, v1, v2, u32(seed) * 11u + 17u);
 
     let direction = normalize(rand_pt_on_tri - x);
-    return direction;
+    return vec4(direction, 0.0);
 }
 
 fn radiance(_ray: Ray, _seed: i32) -> vec3f {
@@ -386,39 +386,50 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         }
     
         if(dot(cur_material.Kd, vec3f(1.0)) == 0.03){ // fix for spheres for now
-            acc_color *= vec3(1.0);
+            acc_color *= vec3(1.0); // need to multiply these by beta
         } else {
-            acc_color *= cur_material.Kd;
+            acc_color *= cur_material.Kd; // need to multiply these by beta
         }
 
         // TODO: sample lights for direct illumination
-        // let light_direction = normalize(vec3(1, 1, 1));
-        // let to_light_test = intersect(ray_with_epsilon(cur_pt + cur_normal * 1.0e-2, vec4(light_direction, 0.0)));
-        // if(!to_light_test.intersected){
-        //     L += beta * cur_material.Kd * vec3(1.0, 0.95, 0.9);
-        // }
-        // let offset_pt = cur_pt + cur_normal * 1.0e-2;
-        // let light_direction = sample_area_lights(offset_pt.xyz, seed);
-        // let to_light_test = intersect(ray_with_epsilon(offset_pt, vec4(light_direction, 0.0)));
-        // if(to_light_test.intersected){
-        //     let new_material = get_material(to_light_test.material_id);
-        //     if(dot(new_material.Ke, vec3f(1.0)) > 0){ 
-        //         L += beta * cur_material.Kd * dot(cur_normal.xyz, light_direction) * 0.5;
-        //     }
-        // }
+        let offset_pt = cur_pt + cur_normal * 1.0e-4;
+        let light_direction = normalize(sample_area_lights(offset_pt.xyz, i32(seed)));
+        seed = hash1u(seed + 7u);
+        let to_light_test = intersect(Ray(offset_pt, light_direction, 1.0 / light_direction));
+        if(to_light_test.intersected){
+            let new_material = get_material(to_light_test.material_id);
+            let light_normal = to_light_test.normal.xyz;
+            if(dot(new_material.Ke, vec3f(1.0)) > 0){ 
+                L += beta * new_material.Ke * acc_color 
+                    * dot(light_normal, -light_direction.xyz) * dot(cur_normal.xyz, light_direction.xyz) 
+                    / (PI * rr_prob);
+            }
+        }
 
         let rr_continue = hash1(seed);
-        
         if(rr_continue > rr_prob){ // don't continue
             break;
         }
 
         // sample outgoing direction to continue path
+
+        
         let sample = sample_hemisphere(cur_pt, cur_normal, i32(seed));
         let new_ray = sample.r;
         let new_pdf = sample.pdf;
 
-        beta *= (1.0 / PI) * dot(new_ray.d, cur_normal) / (new_pdf * rr_prob);
+        var brdf = 0.0;
+        // lambertian / diffuse brdf
+        if(dot(cur_material.Ks, vec3f(1.0)) > 0){
+            brdf = (1.0 / PI);
+        } 
+
+        // lambertian / diffuse brdf
+        else {
+            brdf = (1.0 / PI);
+        }
+        
+        beta *= brdf * dot(new_ray.d, cur_normal) / (new_pdf * rr_prob);
         ray = new_ray;
         depth += 1;
     }

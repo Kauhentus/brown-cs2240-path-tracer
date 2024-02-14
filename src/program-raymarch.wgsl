@@ -414,16 +414,33 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         // sample outgoing direction to continue path
 
         
+        if(cur_material.Ns > 100){
+            let w_i = ray.d.xyz;
+            let n_hat = cur_normal.xyz;
+            let refl = vec4(w_i - 2*dot(w_i, n_hat) * n_hat, 0.0);
+            let new_ray = ray_with_epsilon(cur_pt, refl);
+
+            beta *= 1.0 / (rr_prob);        
+            ray = new_ray;
+            depth += 1;
+            continue;
+        }
+
+        
         let sample = sample_hemisphere(cur_pt, cur_normal, i32(seed));
         let new_ray = sample.r;
         let new_pdf = sample.pdf;
 
         var brdf = 0.0;
-        // lambertian / diffuse brdf
+        // glossy specular / phong brdf
         if(dot(cur_material.Ks, vec3f(1.0)) > 0){
-            brdf = (1.0 / PI);
+            let w_i = ray.d.xyz;
+            let w_o = new_ray.d.xyz;
+            let n_hat = cur_normal.xyz;
+            let refl = w_i  - 2*dot(w_i, n_hat) * n_hat;
+            let n = cur_material.Ns;
+            brdf = cur_material.Ks.x * ((n + 2.0) / (2.0 * PI)) * pow(dot(refl, w_o), n);
         } 
-
         // lambertian / diffuse brdf
         else {
             brdf = (1.0 / PI);

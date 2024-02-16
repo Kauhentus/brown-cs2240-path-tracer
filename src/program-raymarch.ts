@@ -212,10 +212,7 @@ export const programEntry = (
         let rot_z = mat4_rot_y(1 * Math.PI / 180);
         let enable_camera_movement = false;
 
-        // setInterval(() => {
-        //     const time_elapsed = (new Date().getTime() - start_time);
-        //     console.log(`FPS: ${frames / time_elapsed * 1000}`)
-        // }, 1000);
+        console.log(`${samples_per_pixel} samples per pixel`);
 
         const render_loop = async () => {
             const time_elapsed = (new Date().getTime() - start_time);
@@ -313,14 +310,14 @@ export const programEntry = (
 
                 console.log(`Path traced in ${new Date().getTime() - time} ms`)
 
-                // if(frames < samples_per_pixel){
-                    // requestAnimationFrame(render_loop);
-                // } else {
-                //     console.log("Finished rendering!")
-                // }
-                setTimeout(() => {
+                if(frames < samples_per_pixel){
                     requestAnimationFrame(render_loop);
-                }, 50);
+                } else {
+                    console.log("Finished rendering!")
+                }
+                // setTimeout(() => {
+                //     requestAnimationFrame(render_loop);
+                // }, 50);
             })
 
             // setTimeout(() => {
@@ -340,6 +337,7 @@ export const programEntry = (
         '/src/wgsl-util/samplers.wgsl',
         '/src/wgsl-util/ray-triangle-intersection.wgsl',
         '/src/wgsl-util/ray-bbox-intersection.wgsl',
+        '/src/wgsl-util/intersection-logic.wgsl',
     ];
 
     loadShaders(shaderPaths).then(shaders => {

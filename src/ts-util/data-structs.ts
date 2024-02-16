@@ -23,6 +23,7 @@ export type PrimitiveData = {
 // intermediate types
 export type SceneObjectGroup = {
     vertices: number[],
+    vertex_normals: number[],
     objects: SceneObject[]
 }
 

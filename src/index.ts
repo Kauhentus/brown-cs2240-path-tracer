@@ -127,7 +127,7 @@ load_file('/scene_files/final/refraction.ini').then(async (file) => {
         console.log(intermediate)
 
         // create packed bvh data
-        const vertices = intermediate.vertices
+        const vertices = intermediate.vertices;
         const bvh_bounds = bounds_of_vec3(chunk_into_3(vertices));
         const bvh_objects = intermediate.objects.map((o, mat_i) => {
             const indices = o.indices;

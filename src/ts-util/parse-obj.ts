@@ -1,4 +1,4 @@
-import { mat4_vecmul } from "@toysinbox3dprinting/js-geometry";
+import { mat3_tranpose, mat3_vecmul, mat4_invert, mat4_to_mat3, mat4_vecmul } from "@toysinbox3dprinting/js-geometry";
 import { SceneObjectGroup } from "./data-structs";
 
 export const parse_obj = (obj_data: string, mtl_data: string, ctm: number[]) => {
@@ -6,11 +6,13 @@ export const parse_obj = (obj_data: string, mtl_data: string, ctm: number[]) => 
     const raw_obj_lines = obj_data.split('\n');
     const object_groups: SceneObjectGroup = {
         vertices: [],
+        vertex_normals: [],
         objects: [{
             name: 'default',
             indices: []
         }]
     };
+    const ctm_inv = mat4_invert(ctm);
 
     for(let raw_line of raw_obj_lines){
         let line = raw_line.replace(/\s+/g, ' ').replace(/#.*$/, '').trim();
@@ -19,9 +21,14 @@ export const parse_obj = (obj_data: string, mtl_data: string, ctm: number[]) => 
 
         else if(line.slice(0, 2) === 'v '){
             let data = line.slice(2).trim().split(' ').map(parseFloat);
-            // object_groups.vertices.push(...data);
-            let data_trans = mat4_vecmul(ctm, [...data, 1.0]);
+            let data_trans = mat3_vecmul(mat3_tranpose(mat4_to_mat3(ctm_inv)), data);
             object_groups.vertices.push(...data_trans.slice(0, 3));
+        }
+
+        else if(line.slice(0, 3) === 'vn '){
+            let data = line.slice(3).trim().split(' ').map(parseFloat);
+            let data_trans = mat4_vecmul(ctm, [...data, 1.0]);
+            object_groups.vertex_normals.push(...data_trans.slice(0, 3));
         }
 
         else if(line.slice(0, 2) === 'f '){
@@ -30,7 +37,23 @@ export const parse_obj = (obj_data: string, mtl_data: string, ctm: number[]) => 
                 let i = parseInt(triplet.split('/')[0]);
                 if(i > 0) return i;
                 else return num_vertices + i + 1;
-            });
+
+                // let i = parseInt(triplet.split('/')[0]);
+                // let j = parseInt(triplet.split('/')[2]);
+
+                // // no vertex normal
+                // if(Number.isNaN(j)){
+                //     if(i > 0) return i;
+                //     else return num_vertices + i + 1;
+                // } 
+                
+                // // yes vertex normal
+                // else {
+                //     let n_i = i > 0 ? i : num_vertices + i + 1;
+                //     let n_j = j > 0 ? j : num_vertices + j + 1;
+                //     return [n_i, n_j]
+                // }
+            }).flat();
 
             if(raw_indices.length == 3){
                 object_groups.objects.at(-1)?.indices.push(...raw_indices)

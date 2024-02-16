@@ -28,10 +28,7 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
     let emissive_offsets = emissive_object_ids.map(i => {
         return [object_offsets[i], object_offsets[i] + object_sizes[i]];
     });
-    // console.log(object_offsets)
-    // console.log(emissive_offsets)
-    // console.log(emissive_offsets[0], emissive_offsets[2])
-    
+
     // pack and parse material data
     let object_materials = g.objects.map(o => o.material as SceneObjectMaterial)
     const pack_material = (m: SceneObjectMaterial) => {
@@ -44,6 +41,9 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
         ];
     }
     let packed_materials = object_materials.map(pack_material).flat();
+    
+    // pack and parse vertex normal data
+    const packed_vertices = g.vertex_normals;
 
     let group = [
         // meta section is 16 bytes long!
@@ -55,7 +55,10 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
         16 + g.vertices.length, // index where object_indices start
         16 + g.vertices.length + object_indices_flat.length, // index where packed_materials start,
 
-        0, 0, 0, // padding
+        16 + g.vertices.length + object_indices_flat.length + packed_materials.length, // index where vertex normals start
+        g.vertex_normals.length, // num packed vertices  
+        
+        0, // padding
 
         // tells us which objects are emissive -- supports up to four
         // starting triangle index to ending triangle index
@@ -66,7 +69,8 @@ export const pack_scene_object_group = (g: SceneObjectGroup) => {
 
     ].concat(g.vertices)
      .concat(object_indices_flat)
-     .concat(packed_materials);
+     .concat(packed_materials)
+     .concat(g.vertex_normals);
 
     let current_group_length = group.length; // must be divisible by 16!
     let missing_offset = 16 - current_group_length % 16;

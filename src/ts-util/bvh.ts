@@ -183,6 +183,6 @@ export class BVH<T> {
 
         console.log(`    Finished with ${num_nodes} nodes created`)
         console.log(`    Contains ${num_leaves} leaf nodes`)
-        console.log(`    Leaf nodes average ${avg_nums(...num_children)} primitives each`)
+        console.log(`    Leaf nodes average ${Math.floor(avg_nums(...num_children))} primitives each`)
     }
 }

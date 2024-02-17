@@ -14,6 +14,11 @@ import { BVH, BVHObject } from "./ts-util/bvh";
 
 // load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) => {
 // load_file('/scene_files/milestone/sphere_milestone.ini').then(async (file) => {
+
+// load_file('/scene_files/final/cornell_box_direct_lighting_only.ini').then(async (file) => {
+// load_file('/scene_files/final/cornell_box_full_lighting_low_probability.ini').then(async (file) => {
+// load_file('/scene_files/final/cornell_box_full_lighting.ini').then(async (file) => {
+    
 // load_file('/scene_files/final/glossy.ini').then(async (file) => {
 // load_file('/scene_files/final/mirror.ini').then(async (file) => {
 load_file('/scene_files/final/refraction.ini').then(async (file) => {
@@ -176,7 +181,7 @@ load_file('/scene_files/final/refraction.ini').then(async (file) => {
     programEntry(
         screenDimension, ctx, 
         gpu_packed_primitives, camera_data,
-        scene_description.Settings.samplesPerPixel, scene_description.Settings.pathContinuationProb
+        scene_description
     );
 });
 

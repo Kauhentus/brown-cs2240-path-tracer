@@ -211,12 +211,6 @@ fn intersect(cur_ray: Ray) -> Intersection {
         cur_depth += 1;
     }
 
-    // if(stack_pointer == -1) { return null_intersection(); }
-    // if(cur_depth > 2) { return null_intersection(); }
-    // if(num_tri_ints > 1000) { return null_intersection(); }
-    // if(num_leaves == 8) { return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7); }
-    // return Intersection(vec4(1.0), vec4(1.0), true, 1.0, 7);
-
     return closest_intersection;
 }
 
@@ -287,5 +281,5 @@ fn sample_area_lights(x: vec3f, seed: i32) -> vec4f {
     let rand_pt_on_tri = sample_triangle_3D(v0, v1, v2, u32(seed) * 11u + 17u);
 
     let direction = normalize(rand_pt_on_tri - x);
-    return vec4(direction, 0.0);
+    return vec4(direction, 1.0 / f32(num_triangles));
 }

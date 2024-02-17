@@ -2,6 +2,7 @@ import { mat4_translate, mat4_scale, world_to_camera, mat4_invert, mat4_rot_z, m
 import { loadShaders, preprocessShaders } from "./ts-util/shader-utils";
 import { Vertex } from "@toysinbox3dprinting/js-geometry";
 import { CameraData, SceneObjectPacked } from "./ts-util/data-structs";
+import { IniFileScene } from "ts-util/parse-ini";
 
 class Material {
     color: number[];
@@ -49,7 +50,7 @@ const materials = {
 export const programEntry = (
     screenDimension: number[], ctx: CanvasRenderingContext2D, 
     primitive_data: SceneObjectPacked[], camera_data: CameraData,
-    samples_per_pixel: number, path_cont_prob: number
+    scene_description: IniFileScene
 ) => {  
     let screen_dimension_inv = [1 / screenDimension[0], 1 / screenDimension[1]];
     
@@ -62,6 +63,10 @@ export const programEntry = (
     let aspect_ratio = screenDimension[0] / screenDimension[1];
     let world_to_cam_mat = world_to_camera(camera_position, camera_look, camera_data.up);
     let cam_to_world_mat = mat4_invert(world_to_cam_mat);
+    
+    let samples_per_pixel = scene_description.Settings.samplesPerPixel;
+    let path_cont_prob = scene_description.Settings.pathContinuationProb;
+    let direct_lighting_only = scene_description.Settings.directLightingOnly;
 
     const initGPUCompute = async (shaders: string[]) => {
         const adapter = await navigator.gpu.requestAdapter({
@@ -81,7 +86,9 @@ export const programEntry = (
 
             ...world_to_cam_mat,      
             ...cam_to_world_mat,
-            samples_per_pixel, path_cont_prob, 0, 0 // 44, 45, 46, 47
+
+            samples_per_pixel, path_cont_prob, // 44, 45, 46, 47
+            direct_lighting_only ? 1 : -1, 0 
         ];
         const metaMatrix = new Float32Array(metaData);
         const gpuBufferMetaMatrix = device.createBuffer({
@@ -212,7 +219,9 @@ export const programEntry = (
         let rot_z = mat4_rot_y(1 * Math.PI / 180);
         let enable_camera_movement = false;
 
-        console.log(`${samples_per_pixel} samples per pixel`);
+        console.log(`Starting path tracing with the following settings`);
+        console.log(`    ${samples_per_pixel} samples per pixel`);
+        console.log(`    ${path_cont_prob} Russian roulette probability`);
 
         const render_loop = async () => {
             const time_elapsed = (new Date().getTime() - start_time);
@@ -267,14 +276,13 @@ export const programEntry = (
                 
                 sample_runs += 1;
                 let num_pixels = outputData.length / 3;
-                let reinhard = 0;
                 let max_lum = 0;
 
                 for(let i = 0; i < num_pixels; i++){
                     let i3 = i * 3;
-                    sample_collector[i3] += outputData[i3];
-                    sample_collector[i3 + 1] += outputData[i3 + 1];
-                    sample_collector[i3 + 2] += outputData[i3 + 2];
+                    sample_collector[i3] += outputData[i3] >= 0 ? outputData[i3] : 0;
+                    sample_collector[i3 + 1] += outputData[i3 + 1] >= 0 ? outputData[i3 + 1] : 0;
+                    sample_collector[i3 + 2] += outputData[i3 + 2] >= 0 ? outputData[i3 + 2] : 0;
 
                     let raw_r = sample_collector[i3] / sample_runs;
                     let raw_g = sample_collector[i3 + 1] / sample_runs;                    
@@ -292,14 +300,18 @@ export const programEntry = (
                     let raw_g = sample_collector[i3 + 1] / sample_runs;
                     let raw_b = sample_collector[i3 + 2] / sample_runs;
 
-                    // let lum_i = (raw_r + raw_g + raw_b) / 3.0;
+                    let lum_i = (raw_r + raw_g + raw_b) / 3.0;
                     // let lum_o = (lum_i * (1.0 + lum_i / max_lum ** 2.0) / (1.0 + lum_i));
+                    let lum_o = lum_i / (lum_i + 1);
                     // let lum_o = 2;
-                    let lum_o = 0.4;
 
-                    display_buffer[i4] = (raw_r * lum_o * 255) | 0;
-                    display_buffer[i4 + 1] = (raw_g * lum_o * 255) | 0;
-                    display_buffer[i4 + 2] = (raw_b * lum_o * 255) | 0;
+                    let final_r = raw_r * lum_o ** 0.01;
+                    let final_g = raw_g * lum_o ** 0.01;
+                    let final_b = raw_b * lum_o ** 0.01;
+
+                    display_buffer[i4] = (final_r * 255) | 0;
+                    display_buffer[i4 + 1] = (final_g * 255) | 0;
+                    display_buffer[i4 + 2] = (final_b * 255) | 0;
                     display_buffer[i4 + 3] = 255;
                 }
                 imageData.data.set(display_buffer);
@@ -308,16 +320,13 @@ export const programEntry = (
                 gpuReadBuffer.unmap();
                 gpuReadBuffer.destroy();
 
-                console.log(`Path traced in ${new Date().getTime() - time} ms`)
+                console.log(`Path traced in ${new Date().getTime() - time} ms`);
 
                 if(frames < samples_per_pixel){
                     requestAnimationFrame(render_loop);
                 } else {
                     console.log("Finished rendering!")
                 }
-                // setTimeout(() => {
-                //     requestAnimationFrame(render_loop);
-                // }, 50);
             })
 
             // setTimeout(() => {

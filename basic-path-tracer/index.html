@@ -1,0 +1,57 @@
+<html>
+    <head>
+        <link href="./web/style.css" rel="stylesheet">
+    </head>
+
+    <body>
+        <div class="overall-container">
+            <div class="canvas-container">
+                <canvas width="512" height="512" id="main-canvas"></canvas>
+            </div>
+            <div class="side-container">
+                <div class="top-A">
+                    <h1>Path Tracer</h1>
+                    <div class="text">
+                        A basic path tracer demo implemented in WebGPU and WGSL. 
+                        Supports Lambertian, Phong, and Beckmann BRDFs along with reflection + fresnel refraction.
+                        Try playing with the parameters below! Created in Brown CS 2240.
+                        <br><br>
+                        * Note your browser needs to support WebGPU!
+                    </div>
+                </div>
+
+                <div class="top-B">
+                    <div style="display: flex; flex-direction: column; margin-bottom: 0.5rem;">
+                        <div style="margin-bottom: 4px;">Scene File</div>
+                        <select id="file-selector" name="file-selector">
+                            <option value="diffuse">Cornell Box Diffuse</option>
+                            <option value="glossy">Cornell Box Glossy</option>
+                            <option value="mirror">Cornell Box Mirror</option>
+                            <option value="refraction">Cornell Box Refraction</option>
+                            <option value="water">Cornell Box Water</option>
+                        </select>
+                    </div>
+                    <hr style="width: 100%;">
+                    <div style="display: flex; flex-direction: row; margin-top: 0.3rem;">
+                        <div class="label-col">
+                            <div class="line-item"><div>Path termination probability</div></div>
+                            <div class="line-item"><div>Direct lighting only</div></div>
+                            <div class="line-item"><div>Cosine importance sampling</div></div>
+                            <div class="line-item"><div>Microfacet BRDF for walls</div></div>
+                            <div class="line-item"><div>Current number of samples:</div></div>
+                        </div>
+                        <div class="input-col">
+                            <div class="line-item"><input type="number" id="path-rr" name="path-rr" min="0" max="1" step="0.01" value="0.9"></div>
+                            <div class="line-item"><input type="checkbox" id="direct-lighting"></div>
+                            <div class="line-item"><input type="checkbox" id="importance-sampling" checked></div>
+                            <div class="line-item"><input type="checkbox" id="microfacet"></div>
+                            <div class="line-item" id="sample-counter" style="align-items: center;">200</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script src="bundle.js"></script>
+    </body>
+</html>

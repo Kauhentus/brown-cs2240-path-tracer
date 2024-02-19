@@ -1,6 +1,6 @@
 import { load_file } from "./ts-util/load-file";
 import { programEntry } from "./program-raymarch";
-import { ini_file_to_ini_scene, parse_ini_file } from "./ts-util/parse-ini";
+import { IniFileScene, ini_file_to_ini_scene, parse_ini_file } from "./ts-util/parse-ini";
 import * as convert from "xml-js";
 import { CameraData, SceneObjectNode, SceneObjectPacked } from "./ts-util/data-structs";
 import { Triangle, Vertex, mat4_clone, mat4_matmul, mat4_rot_y, mat4_scale, mat4_translate } from "@toysinbox3dprinting/js-geometry";
@@ -9,19 +9,182 @@ import { parse_obj } from "./ts-util/parse-obj";
 import { pack_bvh, pack_scene_object_group } from "./packer";
 import { BVH, BVHObject } from "./ts-util/bvh";
 
-// import { init_three } from "@toysinbox3dprinting/js-geometry";
-// init_three();
+type UI_Input = {
+    file: string;
+    path_rr: number;
+    direct_lighting: boolean;
+    importance_sample: boolean;
+    microfacet: boolean;
+}
+
+const paths: {[key: string]: string} = {
+    'diffuse': `/basic-path-tracer/models/CornellBox/CornellBox-Original.obj`,
+    'glossy': `/basic-path-tracer/models/CornellBox/CornellBox-Glossy.obj`,
+    'mirror': `/basic-path-tracer/models/CornellBox/CornellBox-Mirror.obj`,
+    'refraction': `/basic-path-tracer/models/CornellBox/CornellBox-Sphere.obj`,
+    'water': `/basic-path-tracer/models/CornellBox/CornellBox-Water.obj`
+};
+
+let callbacks: {
+    break_loop: () => boolean;
+    get_num_samples: () => number;
+} | undefined;
+
+const initialize_UI = () => {
+    const input_file = document.getElementById('file-selector') as HTMLInputElement;
+    const input_path_rr = document.getElementById('path-rr') as HTMLInputElement;
+    const input_direct_lighting = document.getElementById('direct-lighting') as HTMLInputElement;
+    const input_importance_sampling = document.getElementById('importance-sampling') as HTMLInputElement;
+    const input_microfacet = document.getElementById('microfacet') as HTMLInputElement;
+    const label_sample_count = document.getElementById('sample-counter') as HTMLDivElement;
+    
+    const get_current_values = (): UI_Input => {
+        const file = input_file.value;
+        const path_rr = input_path_rr.value;
+        const direct_lighting = input_direct_lighting.checked;
+        const importance_sample = input_importance_sampling.checked;
+        const microfacet = input_microfacet.checked;
+
+        return {
+            file: file,
+            path_rr: Math.min(1.0, Math.max(0.0, parseFloat(path_rr))),
+            direct_lighting: direct_lighting,
+            importance_sample: importance_sample,
+            microfacet: microfacet
+        }
+    }
+
+    setInterval(() => {
+        label_sample_count.innerHTML = `${callbacks?.get_num_samples() || 0}`;
+    }, 500);
+
+    const on_value_update = async () => {
+        if(callbacks !== undefined) {
+            callbacks.break_loop(); 
+        }
+
+        const current_values = get_current_values();
+        const selected_scene = current_values.file;
+        const file_path = paths[selected_scene];
+        console.log(file_path)
+
+        const camera_data: CameraData = { 
+            focus: new Vertex(0, 1, 0),
+            heightangle: 45, 
+            pos: new Vertex(0, 1, 3.6), 
+            up: new Vertex(0, 1, 0)
+        };
+
+        const scene_description: IniFileScene = {
+            IO: {
+                output: "",
+                scene: ""
+            },
+            Settings: {
+                directLightingOnly: current_values.direct_lighting,
+                imageHeight: 512,
+                imageWidth: 512,
+                numDirectLightingSamples: 1,
+                pathContinuationProb: current_values.path_rr,
+                samplesPerPixel: 1
+            }
+        }
+    
+        // pack extracted primitives into buffers for the GPU
+        const gpu_packed_primitive: SceneObjectPacked = await (async (p: string) => {
+            let path = p;
+
+            let obj_data = await load_file(path);
+            let mtl_data;
+            try {
+                mtl_data = await load_file(path.slice(0, -3) + 'mtl');
+            } catch(e) {
+                mtl_data = "";
+            }
+
+            // create packed triangle data 
+            const intermediate = parse_obj(obj_data, mtl_data, mat4_scale(1, 1, 1));
+            const packed_array = pack_scene_object_group(intermediate);
+
+            console.log(intermediate)
+
+            // create packed bvh data
+            const vertices = intermediate.vertices;
+            const bvh_bounds = bounds_of_vec3(chunk_into_3(vertices));
+            const bvh_objects = intermediate.objects.map((o, mat_i) => {
+                const indices = o.indices;
+                const objects: BVHObject<number[]>[] = [];
+
+                for(let i = 0; i < indices.length; i += 3){
+                    let i0 = (indices[i] - 1) * 3;
+                    let i1 = (indices[i + 1] - 1) * 3;
+                    let i2 = (indices[i + 2] - 1) * 3;
+
+                    let v0 = [vertices[i0], vertices[i0 + 1], vertices[i0 + 2]];
+                    let v1 = [vertices[i1], vertices[i1 + 1], vertices[i1 + 2]];
+                    let v2 = [vertices[i2], vertices[i2 + 1], vertices[i2 + 2]];
+                    
+                    let tri = [v0, v1, v2];
+                    let tri_bounds = bounds_of_vec3(tri);
+                    objects.push({
+                        obj: [indices[i], indices[i + 1], indices[i + 2], mat_i],
+                        bounds: tri_bounds
+                    });
+                }
+
+                return objects;
+            }).flat();
+            const bvh = new BVH(bvh_objects, bvh_bounds);
+            const packed_bvh = pack_bvh(bvh);
+            
+            return {
+                triangle_data: packed_array,
+                bvh_data: packed_bvh,
+                bounds: bvh_bounds
+            };
+        })(file_path);
+
+        // initialize gpu pipeline
+        const x_res = scene_description.Settings.imageWidth;
+        const aspect_ratio = x_res / scene_description.Settings.imageHeight;
+        const round_4 = (n : number) => Math.floor(n / 4) * 4;
+        const screenDimension = [round_4(x_res), round_4(x_res / aspect_ratio)];
+        const mainCanvas = document.getElementById('main-canvas') as HTMLCanvasElement;
+        mainCanvas.width = screenDimension[0];
+        mainCanvas.height = screenDimension[1];
+        const ctx = mainCanvas.getContext('2d') as CanvasRenderingContext2D;
+
+        callbacks = programEntry(
+            screenDimension, ctx, 
+            [gpu_packed_primitive], camera_data,
+            scene_description,
+            current_values.microfacet,
+            current_values.importance_sample,
+            true
+        );
+    }
+
+    input_file.addEventListener('change', on_value_update);
+    input_path_rr.addEventListener('change', on_value_update);
+    input_direct_lighting.addEventListener('change', on_value_update);
+    input_importance_sampling.addEventListener('change', on_value_update);
+    input_microfacet.addEventListener('change', on_value_update);
+
+    on_value_update();
+}
+initialize_UI();
 
 // load_file('/scene_files/milestone/cornell_box_milestone.ini').then(async (file) => {
 // load_file('/scene_files/milestone/sphere_milestone.ini').then(async (file) => {
-
 // load_file('/scene_files/final/cornell_box_direct_lighting_only.ini').then(async (file) => {
 // load_file('/scene_files/final/cornell_box_full_lighting_low_probability.ini').then(async (file) => {
-// load_file('/scene_files/final/cornell_box_full_lighting.ini').then(async (file) => {
-    
+    /*
+load_file('/scene_files/final/cornell_box_full_lighting.ini').then(async (file) => {
+    return;
+// load_file('/scene_files/final/experiment.ini').then(async (file) => {
 // load_file('/scene_files/final/glossy.ini').then(async (file) => {
 // load_file('/scene_files/final/mirror.ini').then(async (file) => {
-load_file('/scene_files/final/refraction.ini').then(async (file) => {
+// load_file('/scene_files/final/refraction.ini').then(async (file) => {
     // parse scene config .ini file
     const ini_file = parse_ini_file(file);
     const scene_description = ini_file_to_ini_scene(ini_file);
@@ -178,12 +341,11 @@ load_file('/scene_files/final/refraction.ini').then(async (file) => {
     mainCanvas.width = screenDimension[0];
     mainCanvas.height = screenDimension[1];
     const ctx = mainCanvas.getContext('2d') as CanvasRenderingContext2D;
+
     programEntry(
         screenDimension, ctx, 
         gpu_packed_primitives, camera_data,
         scene_description
     );
 });
-
-
-console.log("hello world");
+*/

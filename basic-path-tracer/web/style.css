@@ -1,0 +1,70 @@
+body {
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.text {
+    font-size: 11pt;
+}
+
+.overall-container {
+    display: flex;
+    flex-direction: row;
+    width: fit-content;
+
+    margin-top: 4rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.canvas-container {
+    border: 1px solid gray;
+    border-radius: 2px;
+}
+
+#main-canvas {
+    width: 512px;
+    height: 512px;
+    background-color: black;
+}
+
+.side-container {
+    display: flex;
+    flex-direction: column;
+    width: 28rem;
+    margin-left: 1rem;
+}
+
+.top-A {
+    border: 1px solid gray;
+    border-radius: 2px;
+    padding: 1rem;
+}
+
+.top-B {
+    border: 1px solid gray;
+    border-radius: 2px;
+
+    margin-top: 1rem;
+    padding: 1rem;
+
+    display: flex;
+    flex-direction: column;
+}
+
+.label-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.input-col {
+    display: flex;
+    flex-direction: column;
+    margin-left: 1rem;
+}
+
+.line-item {
+    height: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}

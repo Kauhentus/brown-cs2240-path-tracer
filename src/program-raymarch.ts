@@ -3,6 +3,7 @@ import { loadShaders, preprocessShaders } from "./ts-util/shader-utils";
 import { Vertex } from "@toysinbox3dprinting/js-geometry";
 import { CameraData, SceneObjectPacked } from "./ts-util/data-structs";
 import { IniFileScene } from "ts-util/parse-ini";
+import { compiled_shader } from "./compiled_shader";
 
 class Material {
     color: number[];
@@ -50,7 +51,10 @@ const materials = {
 export const programEntry = (
     screenDimension: number[], ctx: CanvasRenderingContext2D, 
     primitive_data: SceneObjectPacked[], camera_data: CameraData,
-    scene_description: IniFileScene
+    scene_description: IniFileScene,
+    use_microfacet?: boolean,
+    use_cosine_importance?: boolean,
+    use_web_paths?: boolean
 ) => {  
     let screen_dimension_inv = [1 / screenDimension[0], 1 / screenDimension[1]];
     
@@ -68,11 +72,17 @@ export const programEntry = (
     let path_cont_prob = scene_description.Settings.pathContinuationProb;
     let direct_lighting_only = scene_description.Settings.directLightingOnly;
 
+    let looping = true;
+    let break_loop = () => looping = false;
+
+    let frames = 0;
+    let get_num_samples = () => frames;
+
     const initGPUCompute = async (shaders: string[]) => {
         const adapter = await navigator.gpu.requestAdapter({
             powerPreference: "high-performance"
         });
-        if (!adapter) return;
+        if (!adapter) throw Error("No GPU device located");
         const device = await adapter.requestDevice();
 
         // META DATA GPU BUFFER
@@ -88,7 +98,11 @@ export const programEntry = (
             ...cam_to_world_mat,
 
             samples_per_pixel, path_cont_prob, // 44, 45, 46, 47
-            direct_lighting_only ? 1 : -1, 0 
+            direct_lighting_only ? 1 : -1, 
+            use_microfacet ? 1 : -1,
+
+            use_cosine_importance ? 1 : -1,
+            0, 0, 0, 0
         ];
         const metaMatrix = new Float32Array(metaData);
         const gpuBufferMetaMatrix = device.createBuffer({
@@ -212,7 +226,6 @@ export const programEntry = (
             }
         });
 
-        let frames = 0;
         let start_time = new Date().getTime();
         const imageData = ctx.createImageData(screenDimension[0], screenDimension[1]);
 
@@ -224,6 +237,7 @@ export const programEntry = (
         console.log(`    ${path_cont_prob} Russian roulette probability`);
 
         const render_loop = async () => {
+            if(!looping) return;
             const time_elapsed = (new Date().getTime() - start_time);
             frames += 1;
 
@@ -273,37 +287,24 @@ export const programEntry = (
             gpuReadBuffer.mapAsync(GPUMapMode.READ).then(() => {
                 const arrayBuffer = gpuReadBuffer.getMappedRange();
                 const outputData = new Float32Array(arrayBuffer);
-                
+
                 sample_runs += 1;
                 let num_pixels = outputData.length / 3;
-                let max_lum = 0;
-
-                for(let i = 0; i < num_pixels; i++){
-                    let i3 = i * 3;
-                    sample_collector[i3] += outputData[i3] >= 0 ? outputData[i3] : 0;
-                    sample_collector[i3 + 1] += outputData[i3 + 1] >= 0 ? outputData[i3 + 1] : 0;
-                    sample_collector[i3 + 2] += outputData[i3 + 2] >= 0 ? outputData[i3 + 2] : 0;
-
-                    let raw_r = sample_collector[i3] / sample_runs;
-                    let raw_g = sample_collector[i3 + 1] / sample_runs;                    
-                    let raw_b = sample_collector[i3 + 2] / sample_runs;
-
-                    let lum_i = (raw_r + raw_g + raw_b) / 3.0;
-                    if(lum_i > max_lum) max_lum = lum_i;
-                }
 
                 for(let i = 0; i < num_pixels; i++){
                     let i3 = i * 3;
                     let i4 = i * 4;
+
+                    sample_collector[i3] += outputData[i3] >= 0 ? outputData[i3] : 0;
+                    sample_collector[i3 + 1] += outputData[i3 + 1] >= 0 ? outputData[i3 + 1] : 0;
+                    sample_collector[i3 + 2] += outputData[i3 + 2] >= 0 ? outputData[i3 + 2] : 0;
 
                     let raw_r = sample_collector[i3] / sample_runs;
                     let raw_g = sample_collector[i3 + 1] / sample_runs;
                     let raw_b = sample_collector[i3 + 2] / sample_runs;
 
                     let lum_i = (raw_r + raw_g + raw_b) / 3.0;
-                    // let lum_o = (lum_i * (1.0 + lum_i / max_lum ** 2.0) / (1.0 + lum_i));
                     let lum_o = lum_i / (lum_i + 1);
-                    // let lum_o = 2;
 
                     let final_r = raw_r * lum_o ** 0.01;
                     let final_g = raw_g * lum_o ** 0.01;
@@ -320,25 +321,21 @@ export const programEntry = (
                 gpuReadBuffer.unmap();
                 gpuReadBuffer.destroy();
 
-                console.log(`Path traced in ${new Date().getTime() - time} ms`);
+                // console.log(`Path traced in ${new Date().getTime() - time} ms`);
 
-                if(frames < samples_per_pixel){
+                // if(frames < samples_per_pixel){
                     requestAnimationFrame(render_loop);
-                } else {
-                    console.log("Finished rendering!")
-                }
+                // } else {
+                //     console.log("Finished rendering!")
+                // }
             })
-
-            // setTimeout(() => {
-            //     
-            // }, 1000);
         };
         render_loop();
 
         return true;
     }
     
-    const shaderPaths = [
+    const shaderPaths = !use_web_paths ? [
         '/src/program-raymarch.wgsl',
         '/src/wgsl-util/data-structs.wgsl',
         '/src/primitive.wgsl',
@@ -347,11 +344,35 @@ export const programEntry = (
         '/src/wgsl-util/ray-triangle-intersection.wgsl',
         '/src/wgsl-util/ray-bbox-intersection.wgsl',
         '/src/wgsl-util/intersection-logic.wgsl',
+    ] : [
+        '/basic-path-tracer/src/program-raymarch.wgsl',
+        '/basic-path-tracer/src/wgsl-util/data-structs.wgsl',
+        '/basic-path-tracer/src/primitive.wgsl',
+        '/basic-path-tracer/src/wgsl-util/hash.wgsl',
+        '/basic-path-tracer/src/wgsl-util/samplers.wgsl',
+        '/basic-path-tracer/src/wgsl-util/ray-triangle-intersection.wgsl',
+        '/basic-path-tracer/src/wgsl-util/ray-bbox-intersection.wgsl',
+        '/basic-path-tracer/src/wgsl-util/intersection-logic.wgsl',
     ];
 
-    loadShaders(shaderPaths).then(shaders => {
-        return preprocessShaders(shaders, shaderPaths);
-    }).then(async (shaders) => {
-        await initGPUCompute(shaders); 
-    });
+    if(!use_web_paths){
+        loadShaders(shaderPaths).then(shaders => {
+            return preprocessShaders(shaders, shaderPaths);
+        }).then(async (shaders) => {
+            console.log(shaders);
+            initGPUCompute(shaders).catch(err => {
+                console.log(err);
+            }); 
+        });
+    } else {
+        initGPUCompute([compiled_shader]).catch(err => {
+            console.log(err);
+        }); 
+    }
+
+
+    return {
+        break_loop: break_loop,
+        get_num_samples: get_num_samples
+    };
 }

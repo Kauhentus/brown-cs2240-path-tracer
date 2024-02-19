@@ -6,7 +6,6 @@ fn intersect(cur_ray: Ray) -> Intersection {
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
-
         
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
@@ -76,38 +75,7 @@ fn intersect(cur_ray: Ray) -> Intersection {
                         primitive_0[v_start_offset + i2 + 2], 
                     );
 
-                    var intersection: Intersection;
-
-                    // if(i2 < vn_range){
-                    //     let v0n = vec3f(
-                    //         primitive_0[vn_start_offset + i0], 
-                    //         primitive_0[vn_start_offset + i0 + 1], 
-                    //         primitive_0[vn_start_offset + i0 + 2], 
-                    //     );
-                    //     let v1n = vec3f(
-                    //         primitive_0[vn_start_offset + i1], 
-                    //         primitive_0[vn_start_offset + i1 + 1], 
-                    //         primitive_0[vn_start_offset + i1 + 2], 
-                    //     );
-                    //     let v2n = vec3f(
-                    //         primitive_0[vn_start_offset + i2], 
-                    //         primitive_0[vn_start_offset + i2 + 1], 
-                    //         primitive_0[vn_start_offset + i2 + 2], 
-                    //     );
-
-                    //     intersection = ray_triangle_intersection_vertex_normals(
-                    //         cur_ray, v0, v1, v2,
-                    //         v0n, v1n, v2n
-                    //     );
-                    // }
-    
-                    // else {
-                    //     intersection = ray_triangle_intersection(
-                    //         cur_ray, v0, v1, v2
-                    //     );
-                    // }
-
-                    intersection = ray_triangle_intersection(
+                    let intersection = ray_triangle_intersection(
                         cur_ray, v0, v1, v2
                     );
 

@@ -12,37 +12,64 @@ fn mat_rodriguez(axis: vec3f, theta: f32) -> mat3x3f {
     );
 }
 
-fn sample_hemisphere(x: vec4f, n: vec4f, seed: i32) -> RaySample {
+fn sample_hemisphere(x: vec4f, n: vec4f, seed: i32, importance_sample: bool) -> RaySample {
     let sample = hash2(u32(seed) * 7u + 11u);
     let xi_1 = sample.x;
     let xi_2 = sample.y;
 
-    let phi = 2 * PI * xi_1;
-    // let theta = acos(xi_2);
-    let theta = acos(sqrt(xi_2));
-    
-    let nx = cos(phi) * sin(theta);
-    let ny = sin(phi) * sin(theta);
-    let nz = cos(theta);
-    let direction = vec3f(nx, ny, nz);
+    if(importance_sample){
+        let phi = 2 * PI * xi_1;
+        let theta = acos(sqrt(xi_2));
+        
+        let nx = cos(phi) * sin(theta);
+        let ny = sin(phi) * sin(theta);
+        let nz = cos(theta);
+        let direction = vec3f(nx, ny, nz);
 
-    let N = n.xyz;
-    var s = 0.0;
-    if(N.z < 0.0){
-        s = -1.0;
-    } else {
-        s = 1.0;
+        let N = n.xyz;
+        var s = 0.0;
+        if(N.z < 0.0){
+            s = -1.0;
+        } else {
+            s = 1.0;
+        }
+        let a = -1.0 / (s + N.z);
+        let b = N.x * N.y * a;
+        let T = vec3(1.0 + s * N.x * N.x * a, s * b, -s * N.x);
+        let B = vec3(b, s + N.y * N.y * a, -N.y);
+
+        let new_direction = T * nx + B * ny + N * nz;
+
+        var p_omega = cos(theta) / PI;
+        return RaySample(ray_with_epsilon(x, vec4(new_direction, 0.0)), p_omega); 
     }
-    let a = -1.0 / (s + N.z);
-    let b = N.x * N.y * a;
-    let T = vec3(1.0 + s * N.x * N.x * a, s * b, -s * N.x);
-    let B = vec3(b, s + N.y * N.y * a, -N.y);
 
-    let new_direction = T * nx + B * ny + N * nz;
+    else {
+        let phi = 2 * PI * xi_1;
+        let theta = acos(xi_2);
+        
+        let nx = cos(phi) * sin(theta);
+        let ny = sin(phi) * sin(theta);
+        let nz = cos(theta);
+        let direction = vec3f(nx, ny, nz);
 
-    // var p_omega = 1.0 / (2.0 * PI);
-    var p_omega = cos(theta) / PI;
-    return RaySample(ray_with_epsilon(x, vec4(new_direction, 0.0)), p_omega); 
+        let N = n.xyz;
+        var s = 0.0;
+        if(N.z < 0.0){
+            s = -1.0;
+        } else {
+            s = 1.0;
+        }
+        let a = -1.0 / (s + N.z);
+        let b = N.x * N.y * a;
+        let T = vec3(1.0 + s * N.x * N.x * a, s * b, -s * N.x);
+        let B = vec3(b, s + N.y * N.y * a, -N.y);
+
+        let new_direction = T * nx + B * ny + N * nz;
+
+        var p_omega = 1.0 / (2.0 * PI);
+        return RaySample(ray_with_epsilon(x, vec4(new_direction, 0.0)), p_omega);       
+    }
 }
 
 fn sample_hemisphere_old(x: vec4f, n: vec4f, seed: i32) -> RaySample {

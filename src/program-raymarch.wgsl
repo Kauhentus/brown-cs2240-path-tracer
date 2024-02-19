@@ -18,7 +18,8 @@ struct MetaData {
 
     world_to_cam: mat4x4<f32>,
     cam_to_world: mat4x4<f32>,
-    params: vec4f
+    params: vec4f,
+    params_2: vec4f
 }
 
 struct OutputData {
@@ -77,7 +78,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3u) {
         var color = radiance(ray_world, i32(temp_seed));
         total_color += color;
     }
-    total_color *= 1.0 / f32(num_samples);
+    // total_color *= 1.0 / f32(num_samples);
 
     resultMatrix.numbers[index * 3] = total_color.x;
     resultMatrix.numbers[index * 3 + 1] = total_color.y;
@@ -107,6 +108,8 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
     var beta = vec3(1.0);
     let rr_prob = meta_data.params[1];
     let direct_lighting_only = meta_data.params[2] > 0;
+    let use_microfacet = meta_data.params[3] > 0;
+    let use_importance_sampling = meta_data.params_2[0] > 0;
 
     var depth = 0;
     var ray = _ray;
@@ -115,12 +118,11 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
     var seed = hash1u(u32(_seed));
     seed = hash1u(seed);
 
-    while(depth <= 16){
+    while(depth <= 8){
         //////////////////////
         // SAMPLING LOGIC
         //////////////////////
 
-        seed = hash1u(seed);
         var closest_intersection = intersect(ray);
         if(!closest_intersection.intersected){
             break;
@@ -144,10 +146,10 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         // DIRECT LIGHTING LOGIC
         ///////////////////////////
         let offset_pt = cur_pt + cur_normal * 1.0e-4;
+        seed = hash1u(seed);
         let sample_area_light_output = sample_area_lights(offset_pt.xyz, i32(seed));
         let light_direction = vec4(sample_area_light_output.xyz, 0.0);
         let sample_area_light_mc_term = sample_area_light_output.w;
-        seed = hash1u(seed + 7u);
         let to_light_test = intersect(Ray(offset_pt, light_direction, 1.0 / light_direction));
         if(to_light_test.intersected){
             let new_material = get_material(to_light_test.material_id);
@@ -187,6 +189,7 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
         }
 
         // russian roulette term
+        seed = hash1u(seed + 7u);
         let rr_continue = hash1(seed);
         if(rr_continue > rr_prob){ // don't continue
             break;
@@ -252,11 +255,12 @@ fn radiance(_ray: Ray, _seed: i32) -> vec3f {
             continue;
         }
 
-        let sample = sample_hemisphere(cur_pt, cur_normal, i32(seed));
+        seed = hash1u(seed);
+        let sample = sample_hemisphere(cur_pt, cur_normal, i32(seed), use_importance_sampling);
         let new_ray = sample.r;
         let new_pdf = sample.pdf;
         var brdf = vec3(0.0);
-        let enable_beckmann = false;
+        let enable_beckmann = use_microfacet;
 
         // glossy specular / phong brdf
         if(dot(cur_material.Ks, vec3f(1.0)) > 0){
